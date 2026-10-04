@@ -29,3 +29,4 @@ jobs:
         with:
           name: maziwaflow-debug-apk
           path: 'Maziwaflow*/app/build/outputs/apk/debug/*.apk'
+          
