@@ -15,6 +15,12 @@ const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNicXhwdmhmaGFqdWVpd3RuZHJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MDE3NDgsImV4cCI6MjEwNjA3Nzc0OH0.5bVrWU33Vh8iZ1R-1qtOOooRC9fVH7Ztkuy0FrCZi_s";
 
 export default defineConfig({
+  nitro: {
+    cloudflare: {
+      nodeCompat: true,
+      deployConfig: true,
+    },
+  },
   tanstackStart: {
     spa: { enabled: true },
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
