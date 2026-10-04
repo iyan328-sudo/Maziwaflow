@@ -20,7 +20,7 @@ jobs:
 
       - name: Build with Gradle
         run: |
-          cd "Maziwaflow mobile app"
+          cd Maziwaflow*
           chmod +x gradlew
           ./gradlew assembleDebug
 
@@ -28,4 +28,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: maziwaflow-debug-apk
-          path: 'Maziwaflow mobile app/app/build/outputs/apk/debug/*.apk'
+          path: 'Maziwaflow*/app/build/outputs/apk/debug/*.apk'
