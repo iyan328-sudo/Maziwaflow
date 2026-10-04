@@ -18,9 +18,32 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Build with Gradle
+      - name: Locate Project and Build
         run: |
-          cd Maziwaflow*
+          echo "Scanning repository structure..."
+          find . -maxdepth 3 -not -path '*/.*'
+          
+          # Search for gradlew anywhere in the repo
+          GRADLE_PATH=$(find . -name "gradlew" -type f -print -quit)
+          
+          if [ -n "$GRADLE_PATH" ]; then
+            DIR=$(dirname "$GRADLE_PATH")
+            echo "Found gradlew in: $DIR"
+            cd "$DIR"
+          else
+            echo "gradlew not found, searching for build.gradle..."
+            BUILD_PATH=$(find . \( -name "build.gradle" -o -name "build.gradle.kts" \) -type f -print -quit)
+            if [ -n "$BUILD_PATH" ]; then
+              DIR=$(dirname "$BUILD_PATH")
+              echo "Found build.gradle in: $DIR. Generating Gradle wrapper..."
+              cd "$DIR"
+              gradle wrapper
+            else
+              echo "Error: Could not locate any Android project files."
+              exit 1
+            fi
+          fi
+          
           chmod +x gradlew
           ./gradlew assembleDebug
 
@@ -28,5 +51,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: maziwaflow-debug-apk
-          path: 'Maziwaflow*/app/build/outputs/apk/debug/*.apk'
-          
+          path: '**/app/build/outputs/apk/debug/*.apk'
