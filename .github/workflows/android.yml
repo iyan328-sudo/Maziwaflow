@@ -20,8 +20,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle'
-          cache-dependency-path: Maziwaflow mobile app/**/*.gradle*
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
