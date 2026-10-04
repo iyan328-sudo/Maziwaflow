@@ -24,7 +24,28 @@ Prefer working locally? You need Node.js and npm — [install with nvm](https://
 
 ```sh
 git clone <this-repository-url>
-cd <repository-name>
+cd "Maziwaflow  mobile app"
 npm i
 npm run dev
 ```
+
+## Deploy to Cloudflare Workers
+
+The app uses TanStack Start server rendering, so it needs a server-capable host;
+GitHub Pages cannot host the production build on its own. The GitHub Actions
+workflow builds every push and pull request, then deploys pushes to `main` to
+Cloudflare Workers.
+
+To enable automatic deployment:
+
+1. Create a Cloudflare API token with permission to edit Workers and obtain your
+   Cloudflare account ID.
+2. In the GitHub repository, open **Settings → Secrets and variables → Actions**
+   and add repository secrets named `CLOUDFLARE_API_TOKEN` and
+   `CLOUDFLARE_ACCOUNT_ID`.
+3. Push a commit to `main`. After the workflow succeeds, the deployment step
+   reports the public `https://...workers.dev` URL.
+
+To build locally, run `npm run build` from this app directory. The Cloudflare
+Worker entry point and its Wrangler configuration are generated under
+`.output/server/`.

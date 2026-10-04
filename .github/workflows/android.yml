@@ -1,26 +1,40 @@
-diff --git a/.github/workflows/android.yml b/.github/workflows/android.yml
-@@
-       - name: Build with Gradle
--        run: |
--          # Find the directory containing gradlew using a wildcard path
--          APP_DIR=$(dirname $(find . -name "gradlew" -type f -print -quit))
--          echo "Target project directory: $APP_DIR"
--          cd "$APP_DIR"
--          chmod +x gradlew
--          ./gradlew assembleDebug
-+        working-directory: "Maziwaflow  mobile app"
-+        run: |
-+          echo "Target project directory: $PWD"
-+          if [ ! -f gradlew ]; then
-+            echo "gradlew not found in $PWD"
-+            exit 1
-+          fi
-+          chmod +x gradlew
-+          ./gradlew assembleDebug
-@@
-       - name: Upload APK Artifact
-         uses: actions/upload-artifact@v4
-         with:
-           name: maziwaflow-debug-apk
--          path: '**/app/build/outputs/apk/debug/*.apk'
-+          path: 'Maziwaflow  mobile app/**/app/build/outputs/apk/debug/*.apk'
+name: Build and deploy Maziwaflow
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'Maziwaflow  mobile app/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: "Maziwaflow  mobile app"
+        run: npm ci
+
+      - name: Build web app
+        working-directory: "Maziwaflow  mobile app"
+        run: npm run build
+
+      - name: Deploy to Cloudflare Workers
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config .output/server/wrangler.json
+          workingDirectory: "Maziwaflow  mobile app"
