@@ -18,14 +18,18 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x "Maziwaflow mobile app/gradlew"
-
-      - name: Build Debug APK
-        run: cd "Maziwaflow mobile app" && ./gradlew assembleDebug
+      - name: Find and build with Gradle
+        run: |
+          # Find the gradlew file inside any subdirectory if needed
+          GRADLE_W=$(find . -name "gradlew" -type f)
+          DIR=$(dirname "$GRADLE_W")
+          echo "Found gradlew in: $DIR"
+          cd "$DIR"
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: maziwaflow-debug-apk
-          path: "Maziwaflow mobile app/app/build/outputs/apk/debug/*.apk"
+          path: '**/app/build/outputs/apk/debug/*.apk'
