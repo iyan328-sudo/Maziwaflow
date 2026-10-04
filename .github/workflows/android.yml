@@ -18,32 +18,12 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Locate Project and Build
+      - name: Build with Gradle
         run: |
-          echo "Scanning repository structure..."
-          find . -maxdepth 3 -not -path '*/.*'
-          
-          # Search for gradlew anywhere in the repo
-          GRADLE_PATH=$(find . -name "gradlew" -type f -print -quit)
-          
-          if [ -n "$GRADLE_PATH" ]; then
-            DIR=$(dirname "$GRADLE_PATH")
-            echo "Found gradlew in: $DIR"
-            cd "$DIR"
-          else
-            echo "gradlew not found, searching for build.gradle..."
-            BUILD_PATH=$(find . \( -name "build.gradle" -o -name "build.gradle.kts" \) -type f -print -quit)
-            if [ -n "$BUILD_PATH" ]; then
-              DIR=$(dirname "$BUILD_PATH")
-              echo "Found build.gradle in: $DIR. Generating Gradle wrapper..."
-              cd "$DIR"
-              gradle wrapper
-            else
-              echo "Error: Could not locate any Android project files."
-              exit 1
-            fi
-          fi
-          
+          # Find the directory containing gradlew using a wildcard path
+          APP_DIR=$(dirname $(find . -name "gradlew" -type f -print -quit))
+          echo "Target project directory: $APP_DIR"
+          cd "$APP_DIR"
           chmod +x gradlew
           ./gradlew assembleDebug
 
