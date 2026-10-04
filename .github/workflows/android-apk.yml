@@ -24,6 +24,8 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       - run: npm ci
         working-directory: "Maziwaflow  mobile app"
       - run: npm run build
