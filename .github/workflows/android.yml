@@ -18,13 +18,9 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Find and build with Gradle
+      - name: Build with Gradle
         run: |
-          # Find the gradlew file inside any subdirectory if needed
-          GRADLE_W=$(find . -name "gradlew" -type f)
-          DIR=$(dirname "$GRADLE_W")
-          echo "Found gradlew in: $DIR"
-          cd "$DIR"
+          cd "Maziwaflow mobile app"
           chmod +x gradlew
           ./gradlew assembleDebug
 
@@ -32,4 +28,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: maziwaflow-debug-apk
-          path: '**/app/build/outputs/apk/debug/*.apk'
+          path: 'Maziwaflow mobile app/app/build/outputs/apk/debug/*.apk'
