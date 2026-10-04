@@ -7,6 +7,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: 'Maziwaflow mobile app'
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -17,6 +21,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
           cache: 'gradle'
+          cache-dependency-path: Maziwaflow mobile app/**/*.gradle*
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -28,4 +33,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: maziwaflow-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: Maziwaflow mobile app/app/build/outputs/apk/debug/*.apk
