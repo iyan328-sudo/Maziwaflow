@@ -1,16 +1,45 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  getCorsHeaders,
+  getSecurityHeaders,
+  isRateLimited,
+  jsonResponse,
+} from "../_shared/security.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+const allowedOrigins = new Set(["http://localhost:5173", "http://127.0.0.1:5173"]);
 
-function jsonResponse(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+function validatePayload(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
+    return { valid: false, message: "Request body must be an object" };
+  }
+
+  const value = payload as Record<string, unknown>;
+  const phone = typeof value.phone === "string" ? value.phone.trim() : "";
+  const amount = Number(value.amount);
+
+  if (!phone || !/^\+?[1-9]\d{8,14}$/.test(phone)) {
+    return { valid: false, message: "Valid phone number is required" };
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 100000) {
+    return { valid: false, message: "Amount must be a positive number up to 100000" };
+  }
+
+  return {
+    valid: true,
+    data: {
+      phone,
+      amount,
+      farmer_code:
+        typeof value.farmer_code === "string" ? value.farmer_code.trim().slice(0, 50) : undefined,
+      payment_id:
+        typeof value.payment_id === "string" ? value.payment_id.trim().slice(0, 100) : undefined,
+      initiated_by:
+        typeof value.initiated_by === "string"
+          ? value.initiated_by.trim().slice(0, 100)
+          : undefined,
+    },
+  };
 }
 
 function getEnv(key: string, fallback = ""): string {
@@ -101,21 +130,26 @@ function formatPhone(phone: string): string {
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
+    const origin = req.headers.get("Origin");
+    const headers =
+      origin && allowedOrigins.has(origin)
+        ? getCorsHeaders(req)
+        : { "Access-Control-Allow-Origin": "null", Vary: "Origin" };
+    return new Response(null, { status: 200, headers: { ...headers, ...getSecurityHeaders() } });
+  }
+
+  if (isRateLimited(req)) {
+    return jsonResponse(req, { error: "Too many requests" }, 429);
   }
 
   try {
-    const body = await req.json();
-    const { phone, amount, farmer_code, payment_id, initiated_by } = body;
-
-    if (!phone || !amount) {
-      return jsonResponse({ error: "phone and amount are required" }, 400);
+    const parsed = validatePayload(await req.json());
+    if (!parsed.valid) {
+      return jsonResponse(req, { error: parsed.message }, 400);
     }
 
+    const { phone, amount, farmer_code, payment_id, initiated_by } = parsed.data;
     const amountNum = Number(amount);
-    if (!amountNum || amountNum < 1) {
-      return jsonResponse({ error: "amount must be a positive number" }, 400);
-    }
 
     const shortcode = getEnv("MPESA_SHORTCODE", "174379");
     const passkey = getEnv("MPESA_PASSKEY");
@@ -191,7 +225,7 @@ Deno.serve(async (req: Request) => {
       .select("id")
       .single();
 
-    return jsonResponse({
+    return jsonResponse(req, {
       success: true,
       checkout_request_id: stkBody.CheckoutRequestID,
       merchant_request_id: stkBody.MerchantRequestID,
@@ -199,6 +233,6 @@ Deno.serve(async (req: Request) => {
       customer_message: stkBody.CustomerMessage,
     });
   } catch (err) {
-    return jsonResponse({ error: String(err) }, 500);
+    return jsonResponse(req, { error: String(err) }, 500);
   }
 });
