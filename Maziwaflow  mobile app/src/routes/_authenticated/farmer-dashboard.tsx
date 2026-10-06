@@ -1,15 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ClipboardList, TrendingUp, Calendar, IndianRupee, Wallet, CheckCircle2 } from "lucide-react";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from "recharts";
+  ClipboardList,
+  TrendingUp,
+  Calendar,
+  IndianRupee,
+  Wallet,
+  CheckCircle2,
+} from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, ShellCard } from "@/components/AppShell";
 
@@ -56,9 +55,19 @@ const STATUS_STYLE: Record<string, string> = {
 
 function FarmerDashboard() {
   const { user } = Route.useRouteContext();
-  const [profile, setProfile] = useState<{ full_name: string | null; collection_centre: string | null } | null>(null);
+  const [profile, setProfile] = useState<{
+    full_name: string | null;
+    collection_centre: string | null;
+  } | null>(null);
   const [collections, setCollections] = useState<Collection[]>([]);
-  const [balance, setBalance] = useState<{ total_earnings: number; total_paid: number; outstanding_balance: number; unpaid_earnings: number; unpaid_count: number; collection_count: number } | null>(null);
+  const [balance, setBalance] = useState<{
+    total_earnings: number;
+    total_paid: number;
+    outstanding_balance: number;
+    unpaid_earnings: number;
+    unpaid_count: number;
+    collection_count: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -88,7 +97,9 @@ function FarmerDashboard() {
                   });
                 supabase
                   .from("farmer_balances")
-                  .select("total_earnings, total_paid, outstanding_balance, unpaid_earnings, unpaid_count, collection_count")
+                  .select(
+                    "total_earnings, total_paid, outstanding_balance, unpaid_earnings, unpaid_count, collection_count",
+                  )
                   .eq("farmer_code", farmer.farmer_code)
                   .maybeSingle()
                   .then(({ data: bal }) => setBalance(bal as typeof balance));
@@ -107,10 +118,13 @@ function FarmerDashboard() {
     .reduce((a, c) => a + Number(c.quantity_kg), 0);
   const totalEarnings = collections
     .filter((c) => c.status !== "Rejected")
-    .reduce((a, c) => a + Number(c.quantity_kg) * (c.price_per_ksh ?? FALLBACK_PRICE[c.quality_grade] ?? 0), 0);
-  const avgGrade = collections.length > 0
-    ? collections.filter((c) => c.status !== "Rejected").length
-    : 0;
+    .reduce(
+      (a, c) =>
+        a + Number(c.quantity_kg) * (c.price_per_ksh ?? FALLBACK_PRICE[c.quality_grade] ?? 0),
+      0,
+    );
+  const avgGrade =
+    collections.length > 0 ? collections.filter((c) => c.status !== "Rejected").length : 0;
 
   const last7Days = (() => {
     const days: { day: string; kg: number }[] = [];
@@ -150,7 +164,9 @@ function FarmerDashboard() {
             <p className="text-xs font-bold text-muted-foreground uppercase">Total Earnings</p>
           </div>
           <p className="mt-1 text-2xl font-extrabold">
-            {balance ? `KSh ${Number(balance.total_earnings).toLocaleString("en-KE")}` : `KSh ${totalEarnings.toLocaleString("en-KE")}`}
+            {balance
+              ? `KSh ${Number(balance.total_earnings).toLocaleString("en-KE")}`
+              : `KSh ${totalEarnings.toLocaleString("en-KE")}`}
           </p>
         </div>
         <div className="rounded-lg bg-card p-4 ring-1 ring-border">
@@ -162,17 +178,25 @@ function FarmerDashboard() {
             {balance ? `KSh ${Number(balance.total_paid).toLocaleString("en-KE")}` : "—"}
           </p>
         </div>
-        <div className={`rounded-lg p-4 ring-1 ${balance && Number(balance.outstanding_balance) > 0 ? "bg-maziwa-orange/10 ring-maziwa-orange/20" : "bg-card ring-border"}`}>
+        <div
+          className={`rounded-lg p-4 ring-1 ${balance && Number(balance.outstanding_balance) > 0 ? "bg-maziwa-orange/10 ring-maziwa-orange/20" : "bg-card ring-border"}`}
+        >
           <div className="flex items-center gap-2">
             {balance && Number(balance.outstanding_balance) > 0 ? (
               <ClipboardList className="size-4 text-maziwa-orange-deep" />
             ) : (
               <CheckCircle2 className="size-4 text-maziwa-green-deep" />
             )}
-            <p className="text-xs font-bold text-muted-foreground uppercase">{balance && Number(balance.outstanding_balance) > 0 ? "Outstanding" : "Balance"}</p>
+            <p className="text-xs font-bold text-muted-foreground uppercase">
+              {balance && Number(balance.outstanding_balance) > 0 ? "Outstanding" : "Balance"}
+            </p>
           </div>
-          <p className={`mt-1 text-2xl font-extrabold ${balance && Number(balance.outstanding_balance) > 0 ? "text-maziwa-orange-deep" : "text-maziwa-green-deep"}`}>
-            {balance ? `KSh ${Math.abs(Number(balance.outstanding_balance)).toLocaleString("en-KE")}` : "—"}
+          <p
+            className={`mt-1 text-2xl font-extrabold ${balance && Number(balance.outstanding_balance) > 0 ? "text-maziwa-orange-deep" : "text-maziwa-green-deep"}`}
+          >
+            {balance
+              ? `KSh ${Math.abs(Number(balance.outstanding_balance)).toLocaleString("en-KE")}`
+              : "—"}
           </p>
           {balance && Number(balance.outstanding_balance) > 0 && balance.unpaid_count > 0 && (
             <p className="mt-0.5 text-xs text-muted-foreground">
@@ -245,7 +269,11 @@ function FarmerDashboard() {
                 </div>
                 {c.status !== "Rejected" && (
                   <p className="mt-1 text-xs font-semibold text-maziwa-green-deep">
-                    Est. KSh {(Number(c.quantity_kg) * (c.price_per_ksh ?? FALLBACK_PRICE[c.quality_grade] ?? 0)).toLocaleString("en-KE")}
+                    Est. KSh{" "}
+                    {(
+                      Number(c.quantity_kg) *
+                      (c.price_per_ksh ?? FALLBACK_PRICE[c.quality_grade] ?? 0)
+                    ).toLocaleString("en-KE")}
                   </p>
                 )}
               </li>

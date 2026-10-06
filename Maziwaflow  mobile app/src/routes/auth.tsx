@@ -141,7 +141,9 @@ function AuthPage() {
                   >
                     <Icon className="size-5" />
                     <span className="text-xs font-bold">{r.label}</span>
-                    <span className={`text-[10px] leading-tight ${active ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                    <span
+                      className={`text-[10px] leading-tight ${active ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                    >
                       {r.desc}
                     </span>
                   </button>
@@ -154,7 +156,9 @@ function AuthPage() {
             {mode === "signup" && (
               <>
                 <div>
-                  <label className={labelClass} htmlFor="full_name">Full Name</label>
+                  <label className={labelClass} htmlFor="full_name">
+                    Full Name
+                  </label>
                   <input
                     id="full_name"
                     className={fieldClass}
@@ -165,7 +169,9 @@ function AuthPage() {
                 </div>
                 {selectedRole !== "farmer" && (
                   <div>
-                    <label className={labelClass} htmlFor="centre">Collection Centre</label>
+                    <label className={labelClass} htmlFor="centre">
+                      Collection Centre
+                    </label>
                     <input
                       id="centre"
                       className={fieldClass}
@@ -177,7 +183,9 @@ function AuthPage() {
                 )}
                 {selectedRole === "farmer" && (
                   <div>
-                    <label className={labelClass} htmlFor="phone">Phone Number</label>
+                    <label className={labelClass} htmlFor="phone">
+                      Phone Number
+                    </label>
                     <input
                       id="phone"
                       className={fieldClass}
@@ -190,7 +198,9 @@ function AuthPage() {
               </>
             )}
             <div>
-              <label className={labelClass} htmlFor="email">Email Address</label>
+              <label className={labelClass} htmlFor="email">
+                Email Address
+              </label>
               <input
                 id="email"
                 type="email"
@@ -202,7 +212,9 @@ function AuthPage() {
               />
             </div>
             <div>
-              <label className={labelClass} htmlFor="password">Password</label>
+              <label className={labelClass} htmlFor="password">
+                Password
+              </label>
               <input
                 id="password"
                 type="password"

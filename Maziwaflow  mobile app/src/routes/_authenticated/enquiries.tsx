@@ -21,7 +21,10 @@ export const Route = createFileRoute("/_authenticated/enquiries")({
       { title: "Enquiries — Maziwaflow Mobile" },
       { name: "description", content: "Log and respond to farmer questions and support tickets." },
       { property: "og:title", content: "Enquiries — Maziwaflow Mobile" },
-      { property: "og:description", content: "Log and respond to farmer questions and support tickets." },
+      {
+        property: "og:description",
+        content: "Log and respond to farmer questions and support tickets.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -276,7 +279,9 @@ function Enquiries() {
                     <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       {r.farmers?.full_name && <span>Farmer: {r.farmers.full_name}</span>}
                       {r.creator?.full_name && <span>By: {r.creator.full_name}</span>}
-                      <span>{fmtDate(r.created_at)} · {fmtTime(r.created_at)}</span>
+                      <span>
+                        {fmtDate(r.created_at)} · {fmtTime(r.created_at)}
+                      </span>
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-col gap-1.5">
@@ -333,7 +338,9 @@ function Enquiries() {
           </DialogHeader>
           <form onSubmit={submitNew} className="space-y-4">
             <div>
-              <label className={labelClass} htmlFor="subject">Subject</label>
+              <label className={labelClass} htmlFor="subject">
+                Subject
+              </label>
               <input
                 id="subject"
                 className={fieldClass}
@@ -364,7 +371,9 @@ function Enquiries() {
               </div>
             </div>
             <div>
-              <label className={labelClass} htmlFor="farmer_enq">Related Farmer (optional)</label>
+              <label className={labelClass} htmlFor="farmer_enq">
+                Related Farmer (optional)
+              </label>
               <select
                 id="farmer_enq"
                 className={fieldClass}
@@ -380,7 +389,9 @@ function Enquiries() {
               </select>
             </div>
             <div>
-              <label className={labelClass} htmlFor="message">Message</label>
+              <label className={labelClass} htmlFor="message">
+                Message
+              </label>
               <Textarea
                 id="message"
                 className="min-h-[100px] resize-y"
@@ -405,16 +416,16 @@ function Enquiries() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reply to Enquiry</DialogTitle>
-            <DialogDescription>
-              {replyTo?.subject}
-            </DialogDescription>
+            <DialogDescription>{replyTo?.subject}</DialogDescription>
           </DialogHeader>
           <div className="rounded-md bg-muted/50 p-3 text-sm">
             <p className="text-muted-foreground">{replyTo?.message}</p>
           </div>
           <form onSubmit={submitReply} className="space-y-4">
             <div>
-              <label className={labelClass} htmlFor="reply_text">Your Reply</label>
+              <label className={labelClass} htmlFor="reply_text">
+                Your Reply
+              </label>
               <Textarea
                 id="reply_text"
                 className="min-h-[100px] resize-y"

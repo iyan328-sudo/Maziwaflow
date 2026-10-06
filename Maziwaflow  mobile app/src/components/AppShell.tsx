@@ -20,7 +20,10 @@ export function AppShell({
 }) {
   const width = wide ? "max-w-md sm:max-w-3xl" : "max-w-md sm:max-w-lg";
   const router = useRouterState();
-  const userId = (router.location.state as Record<string, unknown>)?.__TSR_context?.user?.id;
+  const context = (
+    router.location.state as { __TSR_context?: { user?: { id?: string } } } | undefined
+  )?.__TSR_context;
+  const userId = context?.user?.id;
   return (
     <div className="flex min-h-dvh flex-col bg-milk">
       <header className="sticky top-0 z-20 bg-maziwa-blue text-white shadow-lg shadow-maziwa-blue/30">

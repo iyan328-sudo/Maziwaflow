@@ -263,7 +263,10 @@ function AdminDashboard() {
           </div>
           <div className="grid grid-cols-3 gap-3">
             {prices.map((p) => (
-              <div key={p.grade} className="rounded-lg bg-muted/40 p-3 text-center ring-1 ring-border/60">
+              <div
+                key={p.grade}
+                className="rounded-lg bg-muted/40 p-3 text-center ring-1 ring-border/60"
+              >
                 <p className="text-xs font-bold text-muted-foreground uppercase">{p.grade}</p>
                 <p className="mt-1 text-lg font-extrabold">KSh {Number(p.price_per_ksh)}</p>
               </div>
@@ -318,7 +321,10 @@ function AdminDashboard() {
                     dataKey="value"
                   >
                     {statusData.map((entry) => (
-                      <Cell key={entry.name} fill={STATUS_COLORS[entry.name] ?? "var(--color-muted)"} />
+                      <Cell
+                        key={entry.name}
+                        fill={STATUS_COLORS[entry.name] ?? "var(--color-muted)"}
+                      />
                     ))}
                   </Pie>
                   <Tooltip
@@ -354,7 +360,10 @@ function AdminDashboard() {
                     dataKey="value"
                   >
                     {gradeData.map((entry) => (
-                      <Cell key={entry.name} fill={GRADE_COLORS[entry.name] ?? "var(--color-muted)"} />
+                      <Cell
+                        key={entry.name}
+                        fill={GRADE_COLORS[entry.name] ?? "var(--color-muted)"}
+                      />
                     ))}
                   </Pie>
                   <Tooltip

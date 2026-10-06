@@ -21,8 +21,11 @@ export function OfflineIndicator() {
     return onQueueUpdate(update);
   }, []);
 
+  const unsynced = pending.filter((p) => !p.synced);
+  const unsyncedCount = unsynced.length;
+
   useEffect(() => {
-    if (!online || pending.filter((p) => !p.synced).length === 0) return;
+    if (!online || unsyncedCount === 0) return;
     setSyncing(true);
     syncPendingCollections((p) => ({
       farmer_code: p.farmer_code,
@@ -40,11 +43,9 @@ export function OfflineIndicator() {
         setPending(getPendingCollections());
       })
       .finally(() => setSyncing(false));
-  }, [online, pending.length]);
+  }, [online, unsyncedCount]);
 
-  const unsynced = pending.filter((p) => !p.synced);
-
-  if (online && unsynced.length === 0 && !syncing) return null;
+  if (online && unsyncedCount === 0 && !syncing) return null;
 
   return (
     <div
@@ -58,11 +59,7 @@ export function OfflineIndicator() {
       {!online && <WifiOff className="size-4" />}
       {syncing && <Loader2 className="size-4 animate-spin" />}
       {online && !syncing && unsynced.length === 0 && <CheckCircle2 className="size-4" />}
-      {!online && (
-        <span>
-          Offline — {unsynced.length} pending
-        </span>
-      )}
+      {!online && <span>Offline — {unsynced.length} pending</span>}
       {online && syncing && <span>Syncing {unsynced.length}…</span>}
       {online && !syncing && unsynced.length === 0 && <span>All synced</span>}
     </div>

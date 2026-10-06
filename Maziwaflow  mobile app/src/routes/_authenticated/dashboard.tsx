@@ -54,24 +54,106 @@ type RouteTarget =
 type Action = { label: string; icon: LucideIcon; className: string; to?: RouteTarget };
 
 const ALL_ACTIONS: Action[] = [
-  { label: "Receive Milk", icon: Milk, className: "bg-maziwa-green hover:bg-maziwa-green-deep", to: "/receive-milk" },
-  { label: "Change Password", icon: KeyRound, className: "bg-maziwa-purple hover:bg-maziwa-purple/90", to: "/change-password" },
-  { label: "Enquiries", icon: MessageCircleQuestion, className: "bg-maziwa-orange hover:bg-maziwa-orange-deep", to: "/enquiries" },
-  { label: "View Collections", icon: ClipboardList, className: "bg-maziwa-soft hover:bg-maziwa-soft-deep", to: "/collections" },
-  { label: "Daily Summary", icon: CalendarDays, className: "bg-maziwa-orange hover:bg-maziwa-orange-deep", to: "/daily-summary" },
-  { label: "Farmer Directory", icon: Users, className: "bg-maziwa-blue hover:bg-maziwa-blue/90", to: "/farmers" },
-  { label: "My Deliveries", icon: BarChart3, className: "bg-maziwa-green hover:bg-maziwa-green-deep", to: "/farmer-dashboard" },
-  { label: "Admin Overview", icon: BarChart3, className: "bg-maziwa-blue hover:bg-maziwa-blue/90", to: "/admin-dashboard" },
-  { label: "Lipa Pole Pole", icon: CreditCard, className: "bg-maziwa-purple hover:bg-maziwa-purple/90", to: "/lipa-pole-pole" },
-  { label: "Notifications", icon: Bell, className: "bg-maziwa-soft hover:bg-maziwa-soft-deep", to: "/notifications" },
-  { label: "Milk Prices", icon: TrendingUp, className: "bg-maziwa-green hover:bg-maziwa-green-deep", to: "/milk-prices" },
-  { label: "Payments", icon: Wallet, className: "bg-maziwa-blue hover:bg-maziwa-blue/90", to: "/payments" },
-  { label: "Staff Accounts", icon: ShieldCheck, className: "bg-maziwa-blue hover:bg-maziwa-blue/90", to: "/staff" },
+  {
+    label: "Receive Milk",
+    icon: Milk,
+    className: "bg-maziwa-green hover:bg-maziwa-green-deep",
+    to: "/receive-milk",
+  },
+  {
+    label: "Change Password",
+    icon: KeyRound,
+    className: "bg-maziwa-purple hover:bg-maziwa-purple/90",
+    to: "/change-password",
+  },
+  {
+    label: "Enquiries",
+    icon: MessageCircleQuestion,
+    className: "bg-maziwa-orange hover:bg-maziwa-orange-deep",
+    to: "/enquiries",
+  },
+  {
+    label: "View Collections",
+    icon: ClipboardList,
+    className: "bg-maziwa-soft hover:bg-maziwa-soft-deep",
+    to: "/collections",
+  },
+  {
+    label: "Daily Summary",
+    icon: CalendarDays,
+    className: "bg-maziwa-orange hover:bg-maziwa-orange-deep",
+    to: "/daily-summary",
+  },
+  {
+    label: "Farmer Directory",
+    icon: Users,
+    className: "bg-maziwa-blue hover:bg-maziwa-blue/90",
+    to: "/farmers",
+  },
+  {
+    label: "My Deliveries",
+    icon: BarChart3,
+    className: "bg-maziwa-green hover:bg-maziwa-green-deep",
+    to: "/farmer-dashboard",
+  },
+  {
+    label: "Admin Overview",
+    icon: BarChart3,
+    className: "bg-maziwa-blue hover:bg-maziwa-blue/90",
+    to: "/admin-dashboard",
+  },
+  {
+    label: "Lipa Pole Pole",
+    icon: CreditCard,
+    className: "bg-maziwa-purple hover:bg-maziwa-purple/90",
+    to: "/lipa-pole-pole",
+  },
+  {
+    label: "Notifications",
+    icon: Bell,
+    className: "bg-maziwa-soft hover:bg-maziwa-soft-deep",
+    to: "/notifications",
+  },
+  {
+    label: "Milk Prices",
+    icon: TrendingUp,
+    className: "bg-maziwa-green hover:bg-maziwa-green-deep",
+    to: "/milk-prices",
+  },
+  {
+    label: "Payments",
+    icon: Wallet,
+    className: "bg-maziwa-blue hover:bg-maziwa-blue/90",
+    to: "/payments",
+  },
+  {
+    label: "Staff Accounts",
+    icon: ShieldCheck,
+    className: "bg-maziwa-blue hover:bg-maziwa-blue/90",
+    to: "/staff",
+  },
 ];
 
 const ROLE_ACTIONS: Record<Role, string[]> = {
-  clerk: ["Receive Milk", "Daily Summary", "Enquiries", "View Collections", "Farmer Directory", "Change Password", "Logout"],
-  farmer: ["My Deliveries", "Payments", "Lipa Pole Pole", "Notifications", "Enquiries", "View Collections", "Change Password", "Logout"],
+  clerk: [
+    "Receive Milk",
+    "Daily Summary",
+    "Enquiries",
+    "View Collections",
+    "Farmer Directory",
+    "Change Password",
+    "Logout",
+  ],
+  farmer: [
+    "My Deliveries",
+    "Payments",
+    "Lipa Pole Pole",
+    "Notifications",
+    "Enquiries",
+    "View Collections",
+    "Change Password",
+    "Logout",
+  ],
   admin: [
     "Admin Overview",
     "Receive Milk",
@@ -133,7 +215,9 @@ function Dashboard() {
       </div>
       <ShellCard>
         <div className="mb-5">
-          <p className="text-xs font-bold text-muted-foreground uppercase">{ROLE_LABELS[role]} menu</p>
+          <p className="text-xs font-bold text-muted-foreground uppercase">
+            {ROLE_LABELS[role]} menu
+          </p>
         </div>
         <nav className="flex flex-col gap-3.5" aria-label="Main menu">
           {visibleActions.map((a) => (

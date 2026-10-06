@@ -50,12 +50,18 @@ function LipaPolePole() {
   const role = useRole();
   const { user } = Route.useRouteContext();
   const [plans, setPlans] = useState<Plan[] | null>(null);
-  const [farmers, setFarmers] = useState<{ farmer_code: string; full_name: string; phone: string | null }[]>([]);
+  const [farmers, setFarmers] = useState<
+    { farmer_code: string; full_name: string; phone: string | null }[]
+  >([]);
   const [farmerPlan, setFarmerPlan] = useState<Plan | null>(null);
   const [farmerCode, setFarmerCode] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
-  const [addForm, setAddForm] = useState({ farmer_code: "", credit_limit_ksh: "5000", installment_amount_ksh: "500" });
+  const [addForm, setAddForm] = useState({
+    farmer_code: "",
+    credit_limit_ksh: "5000",
+    installment_amount_ksh: "500",
+  });
 
   useEffect(() => {
     if (role === "admin") {
@@ -112,7 +118,12 @@ function LipaPolePole() {
   }
 
   async function updateStatus(plan: Plan, status: string) {
-    const updates: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
+    const updates: {
+      status: string;
+      updated_at: string;
+      approved_by?: string;
+      approved_at?: string;
+    } = { status, updated_at: new Date().toISOString() };
     if (status === "approved" || status === "active") {
       updates.approved_by = user.id;
       updates.approved_at = new Date().toISOString();
@@ -131,7 +142,8 @@ function LipaPolePole() {
             <div className="py-8 text-center">
               <CreditCard className="mx-auto size-12 text-muted-foreground/40" />
               <p className="mt-3 text-sm text-muted-foreground">
-                Your account is not linked to a farmer record yet. Please contact your admin to be registered.
+                Your account is not linked to a farmer record yet. Please contact your admin to be
+                registered.
               </p>
             </div>
           ) : !farmerPlan ? (
@@ -153,27 +165,39 @@ function LipaPolePole() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="font-bold">Credit Plan Details</h2>
-                <span className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLE[farmerPlan.status] ?? ""}`}>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLE[farmerPlan.status] ?? ""}`}
+                >
                   {farmerPlan.status.charAt(0).toUpperCase() + farmerPlan.status.slice(1)}
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-lg bg-muted/50 p-3.5">
                   <p className="text-xs font-bold text-muted-foreground uppercase">Credit Limit</p>
-                  <p className="mt-1 text-xl font-extrabold">{fmtKsh(farmerPlan.credit_limit_ksh)}</p>
+                  <p className="mt-1 text-xl font-extrabold">
+                    {fmtKsh(farmerPlan.credit_limit_ksh)}
+                  </p>
                 </div>
                 <div className="rounded-lg bg-muted/50 p-3.5">
-                  <p className="text-xs font-bold text-muted-foreground uppercase">Deducted So Far</p>
-                  <p className="mt-1 text-xl font-extrabold">{fmtKsh(farmerPlan.total_deducted_ksh)}</p>
+                  <p className="text-xs font-bold text-muted-foreground uppercase">
+                    Deducted So Far
+                  </p>
+                  <p className="mt-1 text-xl font-extrabold">
+                    {fmtKsh(farmerPlan.total_deducted_ksh)}
+                  </p>
                 </div>
                 <div className="rounded-lg bg-muted/50 p-3.5">
                   <p className="text-xs font-bold text-muted-foreground uppercase">Installment</p>
-                  <p className="mt-1 text-xl font-extrabold">{fmtKsh(farmerPlan.installment_amount_ksh)}</p>
+                  <p className="mt-1 text-xl font-extrabold">
+                    {fmtKsh(farmerPlan.installment_amount_ksh)}
+                  </p>
                 </div>
                 <div className="rounded-lg bg-muted/50 p-3.5">
                   <p className="text-xs font-bold text-muted-foreground uppercase">Remaining</p>
                   <p className="mt-1 text-xl font-extrabold">
-                    {fmtKsh(Number(farmerPlan.credit_limit_ksh) - Number(farmerPlan.total_deducted_ksh))}
+                    {fmtKsh(
+                      Number(farmerPlan.credit_limit_ksh) - Number(farmerPlan.total_deducted_ksh),
+                    )}
                   </p>
                 </div>
               </div>
@@ -238,7 +262,9 @@ function LipaPolePole() {
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
           </div>
         ) : plans.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">No Lipa Pole Pole plans yet.</p>
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            No Lipa Pole Pole plans yet.
+          </p>
         ) : (
           <ul className="space-y-3">
             {plans.map((p) => (
@@ -246,16 +272,24 @@ function LipaPolePole() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${STATUS_STYLE[p.status] ?? ""}`}>
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${STATUS_STYLE[p.status] ?? ""}`}
+                      >
                         {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
                       </span>
                     </div>
                     <p className="mt-2 font-bold">{p.farmers?.full_name ?? p.farmer_code}</p>
                     <p className="text-xs text-muted-foreground">{p.farmer_code}</p>
                     <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
-                      <span>Limit: <strong>{fmtKsh(p.credit_limit_ksh)}</strong></span>
-                      <span>Deducted: <strong>{fmtKsh(p.total_deducted_ksh)}</strong></span>
-                      <span>Installment: <strong>{fmtKsh(p.installment_amount_ksh)}</strong></span>
+                      <span>
+                        Limit: <strong>{fmtKsh(p.credit_limit_ksh)}</strong>
+                      </span>
+                      <span>
+                        Deducted: <strong>{fmtKsh(p.total_deducted_ksh)}</strong>
+                      </span>
+                      <span>
+                        Installment: <strong>{fmtKsh(p.installment_amount_ksh)}</strong>
+                      </span>
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-1.5">
@@ -269,7 +303,12 @@ function LipaPolePole() {
                       </Button>
                     )}
                     {p.status === "active" && (
-                      <Button size="sm" variant="outline" className="h-8" onClick={() => updateStatus(p, "paused")}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8"
+                        onClick={() => updateStatus(p, "paused")}
+                      >
                         Pause
                       </Button>
                     )}
@@ -301,12 +340,20 @@ function LipaPolePole() {
       </ShellCard>
 
       {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowAdd(false)}>
-          <div className="w-full max-w-md rounded-lg bg-card p-6 shadow-xl ring-1 ring-border" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setShowAdd(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-lg bg-card p-6 shadow-xl ring-1 ring-border"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="mb-4 font-bold">New Lipa Pole Pole Plan</h2>
             <form onSubmit={addPlan} className="space-y-4">
               <div>
-                <label className={labelClass} htmlFor="lp_farmer">Farmer</label>
+                <label className={labelClass} htmlFor="lp_farmer">
+                  Farmer
+                </label>
                 <select
                   id="lp_farmer"
                   className={fieldClass}
@@ -322,7 +369,9 @@ function LipaPolePole() {
                 </select>
               </div>
               <div>
-                <label className={labelClass} htmlFor="lp_limit">Credit Limit (KSh)</label>
+                <label className={labelClass} htmlFor="lp_limit">
+                  Credit Limit (KSh)
+                </label>
                 <input
                   id="lp_limit"
                   type="number"
@@ -332,13 +381,17 @@ function LipaPolePole() {
                 />
               </div>
               <div>
-                <label className={labelClass} htmlFor="lp_inst">Installment Amount (KSh)</label>
+                <label className={labelClass} htmlFor="lp_inst">
+                  Installment Amount (KSh)
+                </label>
                 <input
                   id="lp_inst"
                   type="number"
                   className={fieldClass}
                   value={addForm.installment_amount_ksh}
-                  onChange={(e) => setAddForm((s) => ({ ...s, installment_amount_ksh: e.target.value }))}
+                  onChange={(e) =>
+                    setAddForm((s) => ({ ...s, installment_amount_ksh: e.target.value }))
+                  }
                 />
               </div>
               <Button

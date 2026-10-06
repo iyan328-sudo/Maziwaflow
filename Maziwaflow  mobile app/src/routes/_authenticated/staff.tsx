@@ -1,17 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  Loader2,
-  Plus,
-  Search,
-  Shield,
-  User,
-  KeyRound,
-  Pencil,
-  Eye,
-  EyeOff,
-} from "lucide-react";
+import { Loader2, Plus, Search, Shield, User, KeyRound, Pencil, Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, ShellCard, fieldClass, labelClass } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -144,9 +134,17 @@ function Staff() {
         collection_centre: createForm.collection_centre || undefined,
         role: createForm.role,
       });
-      toast.success(`${createForm.role === "admin" ? "Admin" : "Clerk"} account created for ${createForm.full_name}`);
+      toast.success(
+        `${createForm.role === "admin" ? "Admin" : "Clerk"} account created for ${createForm.full_name}`,
+      );
       setShowCreate(false);
-      setCreateForm({ full_name: "", email: "", collection_centre: "", role: "clerk", password: "" });
+      setCreateForm({
+        full_name: "",
+        email: "",
+        collection_centre: "",
+        role: "clerk",
+        password: "",
+      });
       loadStaff();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not create account");
@@ -280,25 +278,48 @@ function Staff() {
                         {m.collection_centre ?? "No centre"}
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        Joined {new Date(m.created_at).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}
+                        Joined{" "}
+                        {new Date(m.created_at).toLocaleDateString("en-KE", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
                       </p>
                     </div>
-                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold capitalize ${ROLE_STYLE[m.role] ?? ""}`}>
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold capitalize ${ROLE_STYLE[m.role] ?? ""}`}
+                    >
                       {m.role}
                     </span>
                   </div>
                   {m.id !== user.id && (
                     <div className="mt-2 flex gap-2">
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openRoleChange(m)}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => openRoleChange(m)}
+                      >
                         <Pencil className="size-3" /> Role
                       </Button>
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setPwdTarget(m); setPwdForm(""); setShowPwd(false); }}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => {
+                          setPwdTarget(m);
+                          setPwdForm("");
+                          setShowPwd(false);
+                        }}
+                      >
                         <KeyRound className="size-3" /> Password
                       </Button>
                     </div>
                   )}
                   {m.id === user.id && (
-                    <p className="mt-2 text-xs font-semibold text-muted-foreground">This is your account</p>
+                    <p className="mt-2 text-xs font-semibold text-muted-foreground">
+                      This is your account
+                    </p>
                   )}
                 </li>
               ))}
@@ -320,17 +341,25 @@ function Staff() {
                     <td className="py-3 pr-2 font-semibold">
                       {m.full_name ?? "Unnamed"}
                       {m.id === user.id && (
-                        <span className="ml-2 text-xs font-normal text-muted-foreground">(you)</span>
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">
+                          (you)
+                        </span>
                       )}
                     </td>
                     <td className="pr-2 text-muted-foreground">{m.collection_centre ?? "—"}</td>
                     <td className="pr-2">
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold capitalize ${ROLE_STYLE[m.role] ?? ""}`}>
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-bold capitalize ${ROLE_STYLE[m.role] ?? ""}`}
+                      >
                         {m.role}
                       </span>
                     </td>
                     <td className="pr-2 text-muted-foreground whitespace-nowrap">
-                      {new Date(m.created_at).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}
+                      {new Date(m.created_at).toLocaleDateString("en-KE", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
                     </td>
                     <td className="text-right">
                       {m.id !== user.id ? (
@@ -348,7 +377,11 @@ function Staff() {
                             variant="ghost"
                             size="icon"
                             className="size-8"
-                            onClick={() => { setPwdTarget(m); setPwdForm(""); setShowPwd(false); }}
+                            onClick={() => {
+                              setPwdTarget(m);
+                              setPwdForm("");
+                              setShowPwd(false);
+                            }}
                             title="Reset password"
                           >
                             <KeyRound className="size-4" />
@@ -372,12 +405,15 @@ function Staff() {
           <DialogHeader>
             <DialogTitle>Add Staff Account</DialogTitle>
             <DialogDescription>
-              Create a new clerk or admin account. The person can sign in immediately with the email and password you set.
+              Create a new clerk or admin account. The person can sign in immediately with the email
+              and password you set.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submitCreate} className="space-y-4">
             <div>
-              <label className={labelClass} htmlFor="sf_name">Full Name</label>
+              <label className={labelClass} htmlFor="sf_name">
+                Full Name
+              </label>
               <input
                 id="sf_name"
                 className={fieldClass}
@@ -387,7 +423,9 @@ function Staff() {
               />
             </div>
             <div>
-              <label className={labelClass} htmlFor="sf_email">Email Address</label>
+              <label className={labelClass} htmlFor="sf_email">
+                Email Address
+              </label>
               <input
                 id="sf_email"
                 type="email"
@@ -398,30 +436,42 @@ function Staff() {
               />
             </div>
             <div>
-              <label className={labelClass} htmlFor="sf_centre">Collection Centre (optional)</label>
+              <label className={labelClass} htmlFor="sf_centre">
+                Collection Centre (optional)
+              </label>
               <input
                 id="sf_centre"
                 className={fieldClass}
                 value={createForm.collection_centre}
-                onChange={(e) => setCreateForm((s) => ({ ...s, collection_centre: e.target.value }))}
+                onChange={(e) =>
+                  setCreateForm((s) => ({ ...s, collection_centre: e.target.value }))
+                }
                 placeholder="e.g. Kapsabet Cooler"
               />
             </div>
             <div>
-              <label className={labelClass} htmlFor="sf_role">Role</label>
+              <label className={labelClass} htmlFor="sf_role">
+                Role
+              </label>
               <select
                 id="sf_role"
                 className={fieldClass}
                 value={createForm.role}
-                onChange={(e) => setCreateForm((s) => ({ ...s, role: e.target.value as StaffRole }))}
+                onChange={(e) =>
+                  setCreateForm((s) => ({ ...s, role: e.target.value as StaffRole }))
+                }
               >
                 {STAFF_ROLES.map((r) => (
-                  <option key={r} value={r} className="capitalize">{r}</option>
+                  <option key={r} value={r} className="capitalize">
+                    {r}
+                  </option>
                 ))}
               </select>
             </div>
             <div>
-              <label className={labelClass} htmlFor="sf_pwd">Temporary Password</label>
+              <label className={labelClass} htmlFor="sf_pwd">
+                Temporary Password
+              </label>
               <input
                 id="sf_pwd"
                 type="password"
@@ -456,7 +506,9 @@ function Staff() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className={labelClass} htmlFor="role_select">New Role</label>
+              <label className={labelClass} htmlFor="role_select">
+                New Role
+              </label>
               <select
                 id="role_select"
                 className={fieldClass}
@@ -464,7 +516,9 @@ function Staff() {
                 onChange={(e) => setNewRole(e.target.value as StaffRole)}
               >
                 {STAFF_ROLES.map((r) => (
-                  <option key={r} value={r} className="capitalize">{r}</option>
+                  <option key={r} value={r} className="capitalize">
+                    {r}
+                  </option>
                 ))}
               </select>
             </div>
@@ -481,17 +535,28 @@ function Staff() {
       </Dialog>
 
       {/* Reset password dialog */}
-      <AlertDialog open={!!pwdTarget} onOpenChange={(open) => { if (!open) { setPwdTarget(null); setShowPwd(false); } }}>
+      <AlertDialog
+        open={!!pwdTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPwdTarget(null);
+            setShowPwd(false);
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Reset Password</AlertDialogTitle>
             <AlertDialogDescription>
-              Set a new password for {pwdTarget?.full_name ?? "this staff member"}. They will need to use this new password to sign in.
+              Set a new password for {pwdTarget?.full_name ?? "this staff member"}. They will need
+              to use this new password to sign in.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-3 py-2">
             <div className="relative">
-              <label className={labelClass} htmlFor="new_pwd">New Password</label>
+              <label className={labelClass} htmlFor="new_pwd">
+                New Password
+              </label>
               <input
                 id="new_pwd"
                 type={showPwd ? "text" : "password"}

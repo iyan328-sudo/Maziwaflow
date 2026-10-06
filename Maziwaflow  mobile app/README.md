@@ -4,7 +4,7 @@ Goal: Build the foundational UI structure, lock in the design system, and establ
 
 Lovable Prompt Strategy:
 
-Prompt Example: "Create a fully dynamic web and mobile-optimized dashboard titled 'Maziwaflow Mobile' featuring a deep blue header bar and a rounded central white container card. Inside the card, build stacked pill-shaped buttons with exact labels and colors: 'Receive Milk' (Green), 'Change Password' (Purple), 'Enquiries' (Orange), 'View Collections' (Soft Purple/Blue), and 'Logout' (Dark Brown). Include a pink floating help button (?) at the bottom right."  
+Prompt Example: "Create a fully dynamic web and mobile-optimized dashboard titled 'Maziwaflow Mobile' featuring a deep blue header bar and a rounded central white container card. Inside the card, build stacked pill-shaped buttons with exact labels and colors: 'Receive Milk' (Green), 'Change Password' (Purple), 'Enquiries' (Orange), 'View Collections' (Soft Purple/Blue), and 'Logout' (Dark Brown). Include a pink floating help button (?) at the bottom right."
 
 Pro Tip (Theme & Color Locking): Explicitly state your exact color scheme in this opening prompt. This locks your design rules (backgrounds, buttons, cards, and accent colors) so Lovable doesn't drift into mismatched styles as you add more views later.
 

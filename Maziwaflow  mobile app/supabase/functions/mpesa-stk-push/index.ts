@@ -19,9 +19,7 @@ function getEnv(key: string, fallback = ""): string {
 
 function getBaseUrl(): string {
   const env = getEnv("MPESA_ENVIRONMENT", "sandbox");
-  return env === "production"
-    ? "https://api.safaricom.co.ke"
-    : "https://sandbox.safaricom.co.ke";
+  return env === "production" ? "https://api.safaricom.co.ke" : "https://sandbox.safaricom.co.ke";
 }
 
 function generateTimestamp(): string {
@@ -69,14 +67,11 @@ async function getAccessToken(): Promise<string> {
   const auth = btoa(`${consumerKey}:${consumerSecret}`);
   const baseUrl = getBaseUrl();
 
-  const resp = await fetch(
-    `${baseUrl}/oauth/v1/generate?grant_type=client_credentials`,
-    {
-      headers: {
-        Authorization: `Basic ${auth}`,
-      },
+  const resp = await fetch(`${baseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
+    headers: {
+      Authorization: `Basic ${auth}`,
     },
-  );
+  });
 
   if (!resp.ok) {
     const text = await resp.text();

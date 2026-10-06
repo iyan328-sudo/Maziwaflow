@@ -35,7 +35,8 @@ const GRADE_COLORS: Record<string, string> = {
   "Grade C": "bg-maziwa-orange/15 text-maziwa-orange-deep",
 };
 
-const fmtKsh = (n: number) => `KSh ${Number(n).toLocaleString("en-KE", { minimumFractionDigits: 0 })}`;
+const fmtKsh = (n: number) =>
+  `KSh ${Number(n).toLocaleString("en-KE", { minimumFractionDigits: 0 })}`;
 const fmtDate = (s: string) =>
   new Date(s).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" });
 
@@ -96,11 +97,19 @@ function MilkPrices() {
           ) : (
             <ul className="space-y-3">
               {prices.map((p) => (
-                <li key={p.id} className="flex items-center justify-between rounded-lg bg-muted/40 p-4 ring-1 ring-border/60">
-                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${GRADE_COLORS[p.grade] ?? ""}`}>
+                <li
+                  key={p.id}
+                  className="flex items-center justify-between rounded-lg bg-muted/40 p-4 ring-1 ring-border/60"
+                >
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-bold ${GRADE_COLORS[p.grade] ?? ""}`}
+                  >
                     {p.grade}
                   </span>
-                  <span className="text-xl font-extrabold">{fmtKsh(p.price_per_ksh)}<span className="text-sm font-normal text-muted-foreground">/kg</span></span>
+                  <span className="text-xl font-extrabold">
+                    {fmtKsh(p.price_per_ksh)}
+                    <span className="text-sm font-normal text-muted-foreground">/kg</span>
+                  </span>
                 </li>
               ))}
             </ul>
@@ -116,7 +125,8 @@ function MilkPrices() {
         <div className="flex items-center gap-2">
           <TrendingUp className="size-5 text-maziwa-blue" />
           <p className="text-sm font-semibold text-maziwa-blue">
-            Prices update instantly. New collections will use the updated price. Historical records keep their original price.
+            Prices update instantly. New collections will use the updated price. Historical records
+            keep their original price.
           </p>
         </div>
       </div>
@@ -133,7 +143,9 @@ function MilkPrices() {
               <div key={p.id} className="rounded-lg bg-muted/40 p-4 ring-1 ring-border/60">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${GRADE_COLORS[p.grade] ?? ""}`}>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-bold ${GRADE_COLORS[p.grade] ?? ""}`}
+                    >
                       {p.grade}
                     </span>
                     <div className="text-xs text-muted-foreground">
@@ -143,7 +155,9 @@ function MilkPrices() {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="relative">
-                      <span className="absolute top-1/2 left-3 -translate-y-1/2 text-sm font-semibold text-muted-foreground">KSh</span>
+                      <span className="absolute top-1/2 left-3 -translate-y-1/2 text-sm font-semibold text-muted-foreground">
+                        KSh
+                      </span>
                       <input
                         type="number"
                         step="0.5"
@@ -152,7 +166,9 @@ function MilkPrices() {
                         value={edits[p.grade] ?? ""}
                         onChange={(e) => setEdits((s) => ({ ...s, [p.grade]: e.target.value }))}
                       />
-                      <span className="absolute top-1/2 right-3 -translate-y-1/2 text-xs text-muted-foreground">/kg</span>
+                      <span className="absolute top-1/2 right-3 -translate-y-1/2 text-xs text-muted-foreground">
+                        /kg
+                      </span>
                     </div>
                     <Button
                       size="sm"

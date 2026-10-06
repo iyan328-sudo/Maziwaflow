@@ -18,9 +18,13 @@ export const Route = createFileRoute("/_authenticated")({
         : "clerk";
     return { user: data.user, role };
   },
-  component: () => (
+  component: AuthenticatedLayout,
+});
+
+function AuthenticatedLayout() {
+  return (
     <RoleProvider role={Route.useRouteContext().role}>
       <Outlet />
     </RoleProvider>
-  ),
-});
+  );
+}

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Bell, CheckCheck, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, ShellCard } from "@/components/AppShell";
@@ -43,18 +43,18 @@ function Notifications() {
   const { user } = Route.useRouteContext();
   const [items, setItems] = useState<Notification[] | null>(null);
 
-  useEffect(() => {
-    loadNotifications();
-  }, [user.id]);
-
-  function loadNotifications() {
-    supabase
+  const loadNotifications = useCallback(async () => {
+    const { data } = await supabase
       .from("notifications")
       .select("id, title, body, type, is_read, created_at")
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .then(({ data }) => setItems((data as Notification[]) ?? []));
-  }
+      .order("created_at", { ascending: false });
+    setItems(data ?? []);
+  }, [user.id]);
+
+  useEffect(() => {
+    void loadNotifications();
+  }, [loadNotifications]);
 
   async function markAllRead() {
     const unread = (items ?? []).filter((i) => !i.is_read);
@@ -62,7 +62,10 @@ function Notifications() {
     await supabase
       .from("notifications")
       .update({ is_read: true })
-      .in("id", unread.map((i) => i.id));
+      .in(
+        "id",
+        unread.map((i) => i.id),
+      );
     loadNotifications();
   }
 
@@ -77,7 +80,13 @@ function Notifications() {
     <AppShell title="Notifications" subtitle={`${unreadCount} unread`} wide>
       {items !== null && unreadCount > 0 && (
         <div className="mb-3 flex justify-end">
-          <Button type="button" variant="outline" size="sm" className="text-sm" onClick={markAllRead}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="text-sm"
+            onClick={markAllRead}
+          >
             <CheckCheck className="size-4" /> Mark all read
           </Button>
         </div>
@@ -106,7 +115,7 @@ function Notifications() {
                 <div className="flex items-start gap-3">
                   <span
                     className={`flex size-9 shrink-0 items-center justify-center rounded-full ${
-                      TYPE_STYLE[n.type] ?? TYPE_STYLE.general
+                      TYPE_STYLE[n.type] ?? TYPE_STYLE["general"]
                     }`}
                   >
                     <Bell className="size-4" />
@@ -114,7 +123,9 @@ function Notifications() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className="truncate text-sm font-bold">{n.title}</p>
-                      {!n.is_read && <span className="size-2 shrink-0 rounded-full bg-maziwa-blue" />}
+                      {!n.is_read && (
+                        <span className="size-2 shrink-0 rounded-full bg-maziwa-blue" />
+                      )}
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{n.body}</p>
                     <p className="mt-1 text-xs text-muted-foreground">

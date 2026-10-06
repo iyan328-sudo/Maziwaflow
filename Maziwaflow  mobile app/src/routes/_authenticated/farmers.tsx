@@ -2,7 +2,18 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Loader2, Pencil, Plus, Search, Trash2, Users, Link2, Unlink, CheckCircle2, AlertCircle } from "lucide-react";
+import {
+  Loader2,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  Users,
+  Link2,
+  Unlink,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, ShellCard, fieldClass, labelClass } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -122,7 +133,12 @@ function Farmers() {
 
   function openEdit(f: Farmer) {
     setEditing(f);
-    setForm({ farmer_code: f.farmer_code, full_name: f.full_name, location: f.location ?? "", phone: f.phone ?? "" });
+    setForm({
+      farmer_code: f.farmer_code,
+      full_name: f.full_name,
+      location: f.location ?? "",
+      phone: f.phone ?? "",
+    });
     setShowForm(true);
   }
 
@@ -186,7 +202,8 @@ function Farmers() {
       });
       setBusy(false);
       if (error) {
-        if (error.code === "23505") return void toast.error("A farmer with that ID already exists.");
+        if (error.code === "23505")
+          return void toast.error("A farmer with that ID already exists.");
         return void toast.error("Could not add farmer. Please try again.");
       }
       toast.success("Farmer added successfully");
@@ -198,9 +215,13 @@ function Farmers() {
   async function confirmDelete() {
     if (!deleting) return;
     setBusy(true);
-    const { error } = await supabase.from("farmers").delete().eq("farmer_code", deleting.farmer_code);
+    const { error } = await supabase
+      .from("farmers")
+      .delete()
+      .eq("farmer_code", deleting.farmer_code);
     setBusy(false);
-    if (error) return void toast.error("Could not delete farmer. They may have existing collections.");
+    if (error)
+      return void toast.error("Could not delete farmer. They may have existing collections.");
     toast.success("Farmer removed");
     setDeleting(null);
     loadFarmers();
@@ -270,7 +291,10 @@ function Farmers() {
             {/* Mobile cards */}
             <ul className="space-y-2.5 sm:hidden">
               {filtered.map((f) => (
-                <li key={f.farmer_code} className="rounded-lg bg-muted/50 p-3.5 ring-1 ring-border/60">
+                <li
+                  key={f.farmer_code}
+                  className="rounded-lg bg-muted/50 p-3.5 ring-1 ring-border/60"
+                >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate font-bold">{f.full_name}</p>
@@ -279,7 +303,8 @@ function Farmers() {
                       </p>
                       {f.linked_user_id ? (
                         <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-maziwa-green-deep">
-                          <CheckCircle2 className="size-3" /> {linkedAccountMap.get(f.linked_user_id)?.full_name ?? "Linked"}
+                          <CheckCircle2 className="size-3" />{" "}
+                          {linkedAccountMap.get(f.linked_user_id)?.full_name ?? "Linked"}
                         </p>
                       ) : (
                         <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-maziwa-orange-deep">
@@ -288,18 +313,42 @@ function Farmers() {
                       )}
                     </div>
                     <div className="flex shrink-0 gap-1">
-                      <Button variant="ghost" size="icon" className="size-8" onClick={() => openLink(f)} aria-label={`Link account for ${f.full_name}`}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        onClick={() => openLink(f)}
+                        aria-label={`Link account for ${f.full_name}`}
+                      >
                         <Link2 className="size-4" />
                       </Button>
                       {f.linked_user_id && (
-                        <Button variant="ghost" size="icon" className="size-8" onClick={() => setUnlinkTarget(f)} aria-label={`Unlink account for ${f.full_name}`}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          onClick={() => setUnlinkTarget(f)}
+                          aria-label={`Unlink account for ${f.full_name}`}
+                        >
                           <Unlink className="size-4" />
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" className="size-8" onClick={() => openEdit(f)} aria-label={`Edit ${f.full_name}`}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        onClick={() => openEdit(f)}
+                        aria-label={`Edit ${f.full_name}`}
+                      >
                         <Pencil className="size-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="size-8 text-destructive hover:text-destructive" onClick={() => setDeleting(f)} aria-label={`Delete ${f.full_name}`}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-destructive hover:text-destructive"
+                        onClick={() => setDeleting(f)}
+                        aria-label={`Delete ${f.full_name}`}
+                      >
                         <Trash2 className="size-4" />
                       </Button>
                     </div>
@@ -409,7 +458,9 @@ function Farmers() {
           </DialogHeader>
           <form onSubmit={submit} className="space-y-4">
             <div>
-              <label className={labelClass} htmlFor="f_code">Farmer ID</label>
+              <label className={labelClass} htmlFor="f_code">
+                Farmer ID
+              </label>
               <input
                 id="f_code"
                 className={fieldClass}
@@ -420,7 +471,9 @@ function Farmers() {
               />
             </div>
             <div>
-              <label className={labelClass} htmlFor="f_name">Full Name</label>
+              <label className={labelClass} htmlFor="f_name">
+                Full Name
+              </label>
               <input
                 id="f_name"
                 className={fieldClass}
@@ -430,7 +483,9 @@ function Farmers() {
               />
             </div>
             <div>
-              <label className={labelClass} htmlFor="f_loc">Location (optional)</label>
+              <label className={labelClass} htmlFor="f_loc">
+                Location (optional)
+              </label>
               <input
                 id="f_loc"
                 className={fieldClass}
@@ -440,7 +495,9 @@ function Farmers() {
               />
             </div>
             <div>
-              <label className={labelClass} htmlFor="f_phone">Phone (optional)</label>
+              <label className={labelClass} htmlFor="f_phone">
+                Phone (optional)
+              </label>
               <input
                 id="f_phone"
                 className={fieldClass}
@@ -467,7 +524,8 @@ function Farmers() {
           <DialogHeader>
             <DialogTitle>Link Farmer Account</DialogTitle>
             <DialogDescription>
-              Link {linkTarget?.full_name} ({linkTarget?.farmer_code}) to a farmer sign-in account. This lets the farmer log in and see their deliveries, payments, and notifications.
+              Link {linkTarget?.full_name} ({linkTarget?.farmer_code}) to a farmer sign-in account.
+              This lets the farmer log in and see their deliveries, payments, and notifications.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -475,13 +533,16 @@ function Farmers() {
               <div className="rounded-lg bg-muted/50 p-4 text-center">
                 <AlertCircle className="mx-auto size-8 text-maziwa-orange-deep" />
                 <p className="mt-2 text-sm text-muted-foreground">
-                  No unlinked farmer accounts found. The farmer needs to sign up first (creating an account with role "farmer") before you can link them here.
+                  No unlinked farmer accounts found. The farmer needs to sign up first (creating an
+                  account with role "farmer") before you can link them here.
                 </p>
               </div>
             ) : (
               <>
                 <div>
-                  <label className={labelClass} htmlFor="link_select">Select account</label>
+                  <label className={labelClass} htmlFor="link_select">
+                    Select account
+                  </label>
                   <select
                     id="link_select"
                     className={fieldClass}
@@ -490,7 +551,9 @@ function Farmers() {
                   >
                     <option value="">Choose a farmer account…</option>
                     {unlinkedAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>{a.full_name}</option>
+                      <option key={a.id} value={a.id}>
+                        {a.full_name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -514,7 +577,9 @@ function Farmers() {
           <AlertDialogHeader>
             <AlertDialogTitle>Unlink Farmer Account?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will disconnect {unlinkTarget?.full_name} ({unlinkTarget?.farmer_code}) from their sign-in account. The farmer will no longer be able to see their deliveries or notifications on login. This does not delete the account or the farmer record.
+              This will disconnect {unlinkTarget?.full_name} ({unlinkTarget?.farmer_code}) from
+              their sign-in account. The farmer will no longer be able to see their deliveries or
+              notifications on login. This does not delete the account or the farmer record.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

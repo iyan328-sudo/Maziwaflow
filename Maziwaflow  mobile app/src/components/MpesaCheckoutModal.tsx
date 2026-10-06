@@ -13,7 +13,7 @@ type Props = {
   farmerName: string;
   defaultPhone: string;
   amount: number;
-  paymentId?: string;
+  paymentId?: string | undefined;
   initiatedBy: string;
   onSuccess?: (receipt: string | null) => void;
 };
@@ -53,37 +53,43 @@ export function MpesaCheckoutModal({
     return () => stopPolling();
   }, [stopPolling]);
 
-  const handleSuccess = useCallback((receipt: string | null) => {
-    setStatus("success");
-    setResultMsg(receipt ? `M-Pesa receipt: ${receipt}` : "Payment confirmed.");
-    stopPolling();
-    onSuccess?.(receipt);
-  }, [onSuccess, stopPolling]);
+  const handleSuccess = useCallback(
+    (receipt: string | null) => {
+      setStatus("success");
+      setResultMsg(receipt ? `M-Pesa receipt: ${receipt}` : "Payment confirmed.");
+      stopPolling();
+      onSuccess?.(receipt);
+    },
+    [onSuccess, stopPolling],
+  );
 
-  const pollStatus = useCallback((cri: string) => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(async () => {
-      const { data } = await supabase
-        .from("mpesa_transactions")
-        .select("status, mpesa_receipt_number, result_desc")
-        .eq("checkout_request_id", cri)
-        .maybeSingle();
+  const pollStatus = useCallback(
+    (cri: string) => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(async () => {
+        const { data } = await supabase
+          .from("mpesa_transactions")
+          .select("status, mpesa_receipt_number, result_desc")
+          .eq("checkout_request_id", cri)
+          .maybeSingle();
 
-      if (!data) return;
+        if (!data) return;
 
-      if (data.status === "completed") {
-        handleSuccess(data.mpesa_receipt_number);
-      } else if (data.status === "failed") {
-        setStatus("failed");
-        setResultMsg(data.result_desc ?? "Payment failed.");
-        stopPolling();
-      } else if (data.status === "cancelled") {
-        setStatus("cancelled");
-        setResultMsg(data.result_desc ?? "Payment was cancelled.");
-        stopPolling();
-      }
-    }, 5000);
-  }, [handleSuccess, stopPolling]);
+        if (data.status === "completed") {
+          handleSuccess(data.mpesa_receipt_number);
+        } else if (data.status === "failed") {
+          setStatus("failed");
+          setResultMsg(data.result_desc ?? "Payment failed.");
+          stopPolling();
+        } else if (data.status === "cancelled") {
+          setStatus("cancelled");
+          setResultMsg(data.result_desc ?? "Payment was cancelled.");
+          stopPolling();
+        }
+      }, 5000);
+    },
+    [handleSuccess, stopPolling],
+  );
 
   const startStkPush = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -149,7 +155,10 @@ export function MpesaCheckoutModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={handleClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={handleClose}
+    >
       <div
         className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl ring-1 ring-border"
         onClick={(e) => e.stopPropagation()}
@@ -161,7 +170,9 @@ export function MpesaCheckoutModal({
             </div>
             <div>
               <h2 className="font-bold">M-Pesa Payment</h2>
-              <p className="text-xs text-muted-foreground">{farmerName} ({farmerCode})</p>
+              <p className="text-xs text-muted-foreground">
+                {farmerName} ({farmerCode})
+              </p>
             </div>
           </div>
           <button onClick={handleClose} className="text-muted-foreground hover:text-foreground">
@@ -241,9 +252,17 @@ export function MpesaCheckoutModal({
             <p className="mt-4 text-sm font-bold text-destructive">
               {status === "cancelled" ? "Payment Cancelled" : "Payment Failed"}
             </p>
-            {resultMsg && <p className="mt-1.5 text-xs text-muted-foreground text-center max-w-xs">{resultMsg}</p>}
+            {resultMsg && (
+              <p className="mt-1.5 text-xs text-muted-foreground text-center max-w-xs">
+                {resultMsg}
+              </p>
+            )}
             <Button
-              onClick={() => { setStatus("idle"); setResultMsg(""); setCheckoutRequestId(null); }}
+              onClick={() => {
+                setStatus("idle");
+                setResultMsg("");
+                setCheckoutRequestId(null);
+              }}
               variant="outline"
               className="mt-6 h-10 rounded-lg px-8 text-sm font-bold"
             >

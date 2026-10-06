@@ -12,7 +12,15 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { collection_id, farmer_code, farmer_name, phone, quantity_kg, cumulative_kg, collected_at } = await req.json();
+    const {
+      collection_id,
+      farmer_code,
+      farmer_name,
+      phone,
+      quantity_kg,
+      cumulative_kg,
+      collected_at,
+    } = await req.json();
 
     if (!phone) {
       return new Response(JSON.stringify({ sent: false, reason: "no_phone" }), {
