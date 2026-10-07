@@ -19,9 +19,7 @@ function getEnv(key: string, fallback = ""): string {
 
 function getBaseUrl(): string {
   const env = getEnv("MPESA_ENVIRONMENT", "sandbox");
-  return env === "production"
-    ? "https://api.safaricom.co.ke"
-    : "https://sandbox.safaricom.co.ke";
+  return env === "production" ? "https://api.safaricom.co.ke" : "https://sandbox.safaricom.co.ke";
 }
 
 function generateTimestamp(): string {
@@ -69,14 +67,11 @@ async function getAccessToken(): Promise<string> {
   const auth = btoa(`${consumerKey}:${consumerSecret}`);
   const baseUrl = getBaseUrl();
 
-  const resp = await fetch(
-    `${baseUrl}/oauth/v1/generate?grant_type=client_credentials`,
-    {
-      headers: {
-        Authorization: `Basic ${auth}`,
-      },
+  const resp = await fetch(`${baseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
+    headers: {
+      Authorization: `Basic ${auth}`,
     },
-  );
+  });
 
   if (!resp.ok) {
     const text = await resp.text();
@@ -110,21 +105,95 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const body = await req.json();
-    const { phone, amount, farmer_code, payment_id, initiated_by } = body;
-
-    if (!phone || !amount) {
-      return jsonResponse({ error: "phone and amount are required" }, 400);
+    const authHeader = req.headers.get("Authorization");
+    const accessToken = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1];
+    if (!accessToken) {
+      return jsonResponse({ error: "Authentication required" }, 401);
     }
 
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    );
+    const { data: authData, error: authError } = await supabase.auth.getUser(accessToken);
+    if (authError || !authData.user) {
+      return jsonResponse({ error: "Invalid or expired session" }, 401);
+    }
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", authData.user.id)
+      .maybeSingle();
+    if (profileError) throw new Error(`Could not verify account role: ${profileError.message}`);
+    if (profile?.role !== "admin" && profile?.role !== "clerk") {
+      return jsonResponse({ error: "Only admins and clerks can initiate M-Pesa payments" }, 403);
+    }
+
+    const body = await req.json();
+    const { phone, amount, farmer_code, payment_id } = body;
+
+    if (
+      typeof phone !== "string" ||
+      !phone.trim() ||
+      typeof farmer_code !== "string" ||
+      !farmer_code.trim() ||
+      amount == null
+    ) {
+      return jsonResponse({ error: "phone, farmer_code, and amount are required" }, 400);
+    }
+    const farmerCode = farmer_code.trim();
+
     const amountNum = Number(amount);
-    if (!amountNum || amountNum < 1) {
+    if (!Number.isFinite(amountNum) || amountNum < 1) {
       return jsonResponse({ error: "amount must be a positive number" }, 400);
+    }
+    const requestedAmount = Math.floor(amountNum);
+    const formattedPhone = formatPhone(phone);
+    if (!/^254[17]\d{8}$/.test(formattedPhone)) {
+      return jsonResponse({ error: "Enter a valid Kenyan mobile number" }, 400);
+    }
+    if (
+      payment_id != null &&
+      (typeof payment_id !== "string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          payment_id,
+        ))
+    ) {
+      return jsonResponse({ error: "Invalid payment ID" }, 400);
+    }
+
+    const { data: farmer, error: farmerError } = await supabase
+      .from("farmers")
+      .select("farmer_code")
+      .eq("farmer_code", farmerCode)
+      .maybeSingle();
+    if (farmerError) throw new Error(`Could not verify farmer: ${farmerError.message}`);
+    if (!farmer) return jsonResponse({ error: "Farmer not found" }, 400);
+
+    if (payment_id) {
+      const { data: payment, error: paymentError } = await supabase
+        .from("payments")
+        .select("farmer_code, net_ksh")
+        .eq("id", payment_id)
+        .maybeSingle();
+      if (paymentError) throw new Error(`Could not verify payment: ${paymentError.message}`);
+      if (
+        !payment ||
+        payment.farmer_code !== farmerCode ||
+        Math.floor(Number(payment.net_ksh)) !== requestedAmount
+      ) {
+        return jsonResponse(
+          { error: "Payment does not match the selected farmer and amount" },
+          400,
+        );
+      }
     }
 
     const shortcode = getEnv("MPESA_SHORTCODE", "174379");
     const passkey = getEnv("MPESA_PASSKEY");
     const callbackUrl = getEnv("MPESA_CALLBACK_URL");
+    const callbackSecret = getEnv("MPESA_CALLBACK_SECRET");
 
     if (!passkey) {
       return jsonResponse({ error: "MPESA_PASSKEY is not configured" }, 500);
@@ -132,11 +201,18 @@ Deno.serve(async (req: Request) => {
     if (!callbackUrl) {
       return jsonResponse({ error: "MPESA_CALLBACK_URL is not configured" }, 500);
     }
+    if (!callbackSecret) {
+      return jsonResponse({ error: "MPESA_CALLBACK_SECRET is not configured" }, 500);
+    }
+    const callback = new URL(callbackUrl);
+    if (callback.protocol !== "https:") {
+      return jsonResponse({ error: "MPESA_CALLBACK_URL must use HTTPS" }, 500);
+    }
+    callback.searchParams.set("token", callbackSecret);
 
     const token = await getAccessToken();
     const timestamp = generateTimestamp();
     const password = generatePassword(shortcode, passkey, timestamp);
-    const formattedPhone = formatPhone(phone);
 
     const partyA = formattedPhone;
 
@@ -145,13 +221,13 @@ Deno.serve(async (req: Request) => {
       Password: password,
       Timestamp: timestamp,
       TransactionType: "CustomerPayBillOnline",
-      Amount: Math.floor(amountNum),
+      Amount: requestedAmount,
       PartyA: partyA,
       PartyB: shortcode,
       PhoneNumber: formattedPhone,
-      CallBackURL: callbackUrl,
-      AccountReference: farmer_code ?? "Maziwaflow",
-      TransactionDesc: `Payment for ${farmer_code ?? "milk collection"}`,
+      CallBackURL: callback.toString(),
+      AccountReference: farmerCode,
+      TransactionDesc: `Payment for ${farmerCode}`,
     };
 
     const baseUrl = getBaseUrl();
@@ -176,25 +252,26 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    );
-
-    const { data: txRow } = await supabase
+    const { data: txRow, error: transactionError } = await supabase
       .from("mpesa_transactions")
       .insert({
-        farmer_code: farmer_code ?? null,
+        farmer_code: farmerCode,
         payment_id: payment_id ?? null,
+        transaction_type: "stk_push",
         phone: formattedPhone,
-        amount_ksh: amountNum,
+        amount_ksh: requestedAmount,
         checkout_request_id: stkBody.CheckoutRequestID,
         merchant_request_id: stkBody.MerchantRequestID,
         status: "pending",
-        initiated_by: initiated_by ?? null,
+        initiated_by: authData.user.id,
       })
       .select("id")
       .single();
+    if (transactionError) {
+      throw new Error(
+        `M-Pesa prompt sent, but transaction tracking could not be saved: ${transactionError.message}`,
+      );
+    }
 
     return jsonResponse({
       success: true,

@@ -1,7 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Wallet, Plus, ArrowDownCircle, ArrowUpCircle, Receipt, Download, Printer, BookOpen, CheckCircle2, AlertCircle, Smartphone } from "lucide-react";
+import {
+  Loader2,
+  Wallet,
+  Plus,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  Receipt,
+  Download,
+  Printer,
+  BookOpen,
+  CheckCircle2,
+  AlertCircle,
+  Smartphone,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, ShellCard, fieldClass, labelClass } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -53,7 +66,8 @@ type FarmerBalance = {
   last_paid_at: string | null;
 };
 
-const fmtKsh = (n: number) => `KSh ${Number(n).toLocaleString("en-KE", { minimumFractionDigits: 0 })}`;
+const fmtKsh = (n: number) =>
+  `KSh ${Number(n).toLocaleString("en-KE", { minimumFractionDigits: 0 })}`;
 const fmtDate = (s: string) =>
   new Date(s).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" });
 const fmtFullDate = (s: string) =>
@@ -154,7 +168,8 @@ function Payments() {
   async function processPayment(e: React.FormEvent) {
     e.preventDefault();
     if (!form.farmer_code) return void toast.error("Select a farmer");
-    if (form.period_start > form.period_end) return void toast.error("Start date must be before end date");
+    if (form.period_start > form.period_end)
+      return void toast.error("Start date must be before end date");
     setBusy(true);
     const { data, error } = await supabase.rpc("process_payment", {
       p_farmer_code: form.farmer_code,
@@ -167,14 +182,23 @@ function Payments() {
     });
     setBusy(false);
     if (error) return void toast.error("Could not process payment: " + error.message);
-    const result = data as { net_ksh?: number; deduction_ksh?: number; gross_ksh?: number; plan_deducted?: boolean; collections_paid?: number; message?: string };
+    const result = data as {
+      net_ksh?: number;
+      deduction_ksh?: number;
+      gross_ksh?: number;
+      plan_deducted?: boolean;
+      collections_paid?: number;
+      message?: string;
+    };
     if (result?.message) {
       return void toast.info(result.message);
     }
     toast.success(
       `Payment processed: ${fmtKsh(result?.net_ksh ?? 0)} net` +
-      (result?.collections_paid ? ` (${result.collections_paid} collections paid)` : "") +
-      (result?.plan_deducted ? ` (${fmtKsh(result?.deduction_ksh ?? 0)} Lipa Pole Pole deducted)` : ""),
+        (result?.collections_paid ? ` (${result.collections_paid} collections paid)` : "") +
+        (result?.plan_deducted
+          ? ` (${fmtKsh(result?.deduction_ksh ?? 0)} Lipa Pole Pole deducted)`
+          : ""),
     );
     setShowAdd(false);
     setForm({ ...form, reference: "", notes: "" });
@@ -212,20 +236,36 @@ function Payments() {
   }
 
   function exportCsv() {
-    const headers = ["Date", "Farmer Code", "Farmer Name", "Period Start", "Period End", "Gross (KSh)", "Deduction (KSh)", "Net (KSh)", "Method", "Reference", "Status"];
-    const lines = visiblePayments.map((p) => [
-      new Date(p.created_at).toLocaleDateString("en-KE"),
-      p.farmer_code,
-      p.farmers?.full_name ?? "",
-      fmtFullDate(p.period_start),
-      fmtFullDate(p.period_end),
-      p.gross_ksh,
-      p.deduction_ksh,
-      p.net_ksh,
-      p.payment_method ?? "",
-      p.reference ?? "",
-      p.status,
-    ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
+    const headers = [
+      "Date",
+      "Farmer Code",
+      "Farmer Name",
+      "Period Start",
+      "Period End",
+      "Gross (KSh)",
+      "Deduction (KSh)",
+      "Net (KSh)",
+      "Method",
+      "Reference",
+      "Status",
+    ];
+    const lines = visiblePayments.map((p) =>
+      [
+        new Date(p.created_at).toLocaleDateString("en-KE"),
+        p.farmer_code,
+        p.farmers?.full_name ?? "",
+        fmtFullDate(p.period_start),
+        fmtFullDate(p.period_end),
+        p.gross_ksh,
+        p.deduction_ksh,
+        p.net_ksh,
+        p.payment_method ?? "",
+        p.reference ?? "",
+        p.status,
+      ]
+        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+        .join(","),
+    );
     const csv = [headers.join(","), ...lines].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -237,20 +277,36 @@ function Payments() {
   }
 
   function exportLedgerCsv() {
-    const headers = ["Farmer Code", "Farmer Name", "Total Earnings (KSh)", "Total Paid (KSh)", "Total Deductions (KSh)", "Net Paid (KSh)", "Outstanding (KSh)", "Unpaid Earnings (KSh)", "Accepted Collections", "Unpaid Collections", "Last Paid"];
-    const lines = (balances ?? []).map((b) => [
-      b.farmer_code,
-      b.full_name,
-      Number(b.total_earnings).toFixed(0),
-      Number(b.total_paid).toFixed(0),
-      Number(b.total_deductions).toFixed(0),
-      Number(b.total_net_paid).toFixed(0),
-      Number(b.outstanding_balance).toFixed(0),
-      Number(b.unpaid_earnings).toFixed(0),
-      b.collection_count,
-      b.unpaid_count,
-      b.last_paid_at ? fmtFullDate(b.last_paid_at) : "Never",
-    ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
+    const headers = [
+      "Farmer Code",
+      "Farmer Name",
+      "Total Earnings (KSh)",
+      "Total Paid (KSh)",
+      "Total Deductions (KSh)",
+      "Net Paid (KSh)",
+      "Outstanding (KSh)",
+      "Unpaid Earnings (KSh)",
+      "Accepted Collections",
+      "Unpaid Collections",
+      "Last Paid",
+    ];
+    const lines = (balances ?? []).map((b) =>
+      [
+        b.farmer_code,
+        b.full_name,
+        Number(b.total_earnings).toFixed(0),
+        Number(b.total_paid).toFixed(0),
+        Number(b.total_deductions).toFixed(0),
+        Number(b.total_net_paid).toFixed(0),
+        Number(b.outstanding_balance).toFixed(0),
+        Number(b.unpaid_earnings).toFixed(0),
+        b.collection_count,
+        b.unpaid_count,
+        b.last_paid_at ? fmtFullDate(b.last_paid_at) : "Never",
+      ]
+        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+        .join(","),
+    );
     const csv = [headers.join(","), ...lines].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -263,11 +319,13 @@ function Payments() {
 
   function printStatement() {
     const farmerName = farmerFilter
-      ? farmers.find((f) => f.farmer_code === farmerFilter)?.full_name ?? farmerFilter
+      ? (farmers.find((f) => f.farmer_code === farmerFilter)?.full_name ?? farmerFilter)
       : "All Farmers";
     const win = window.open("", "_blank", "width=800,height=600");
     if (!win) return void toast.error("Pop-up blocked. Please allow pop-ups to print.");
-    const rowsHtml = visiblePayments.map((p) => `
+    const rowsHtml = visiblePayments
+      .map(
+        (p) => `
       <tr>
         <td>${fmtFullDate(p.created_at)}</td>
         <td>${p.farmers?.full_name ?? p.farmer_code}</td>
@@ -277,7 +335,9 @@ function Payments() {
         <td style="text-align:right;font-weight:bold">${fmtKsh(Number(p.net_ksh))}</td>
         <td>${p.payment_method ?? "—"}</td>
         <td>${p.reference ?? "—"}</td>
-      </tr>`).join("");
+      </tr>`,
+      )
+      .join("");
     win.document.write(`<!DOCTYPE html><html><head><title>Maziwaflow — Payment Statement</title>
       <style>
         body{font-family:system-ui,sans-serif;margin:32px;color:#1a1a1a}
@@ -326,11 +386,15 @@ function Payments() {
         </div>
         <div className="rounded-lg bg-card p-4 ring-1 ring-border">
           <p className="text-xs font-bold text-muted-foreground uppercase">Deductions</p>
-          <p className="text-xl font-extrabold text-maziwa-purple">{payments ? fmtKsh(totalDeductions) : "—"}</p>
+          <p className="text-xl font-extrabold text-maziwa-purple">
+            {payments ? fmtKsh(totalDeductions) : "—"}
+          </p>
         </div>
         <div className="rounded-lg bg-card p-4 ring-1 ring-border">
           <p className="text-xs font-bold text-muted-foreground uppercase">Net Paid</p>
-          <p className="text-xl font-extrabold text-maziwa-green-deep">{payments ? fmtKsh(totalNet) : "—"}</p>
+          <p className="text-xl font-extrabold text-maziwa-green-deep">
+            {payments ? fmtKsh(totalNet) : "—"}
+          </p>
         </div>
       </div>
 
@@ -339,9 +403,13 @@ function Payments() {
           <div className="rounded-lg bg-maziwa-orange/10 p-4 ring-1 ring-maziwa-orange/20">
             <div className="flex items-center gap-2">
               <AlertCircle className="size-4 text-maziwa-orange-deep" />
-              <p className="text-xs font-bold text-maziwa-orange-deep uppercase">Outstanding Balances</p>
+              <p className="text-xs font-bold text-maziwa-orange-deep uppercase">
+                Outstanding Balances
+              </p>
             </div>
-            <p className="mt-1 text-2xl font-extrabold text-maziwa-orange-deep">{fmtKsh(totalOutstanding)}</p>
+            <p className="mt-1 text-2xl font-extrabold text-maziwa-orange-deep">
+              {fmtKsh(totalOutstanding)}
+            </p>
           </div>
           <div className="rounded-lg bg-card p-4 ring-1 ring-border">
             <div className="flex items-center gap-2">
@@ -372,14 +440,31 @@ function Payments() {
               </select>
             )}
             {showLedgerButton && (
-              <Button size="sm" variant="outline" className="h-9 rounded-lg" onClick={() => setShowLedger(true)}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 rounded-lg"
+                onClick={() => setShowLedger(true)}
+              >
                 <BookOpen className="size-4" /> Ledger
               </Button>
             )}
-            <Button size="sm" variant="outline" className="h-9 rounded-lg" onClick={printStatement} disabled={visiblePayments.length === 0}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 rounded-lg"
+              onClick={printStatement}
+              disabled={visiblePayments.length === 0}
+            >
               <Printer className="size-4" /> Statement
             </Button>
-            <Button size="sm" variant="outline" className="h-9 rounded-lg" onClick={exportCsv} disabled={visiblePayments.length === 0}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 rounded-lg"
+              onClick={exportCsv}
+              disabled={visiblePayments.length === 0}
+            >
               <Download className="size-4" /> CSV
             </Button>
             {canCreate && (
@@ -414,7 +499,9 @@ function Payments() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${STATUS_STYLE[p.status] ?? ""}`}>
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${STATUS_STYLE[p.status] ?? ""}`}
+                      >
                         {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
                       </span>
                       {p.payment_method && (
@@ -442,10 +529,13 @@ function Payments() {
                     </div>
                     {p.deductions && p.deductions.length > 0 && (
                       <div className="mt-2 rounded-md bg-maziwa-purple/8 p-2 ring-1 ring-maziwa-purple/15">
-                        <p className="text-xs font-semibold text-maziwa-purple">Deduction breakdown:</p>
+                        <p className="text-xs font-semibold text-maziwa-purple">
+                          Deduction breakdown:
+                        </p>
                         {p.deductions.map((d) => (
                           <p key={d.id} className="text-xs text-muted-foreground">
-                            {d.type === "lipa_pole_pole" ? "Lipa Pole Pole" : d.type}: {fmtKsh(d.amount_ksh)}
+                            {d.type === "lipa_pole_pole" ? "Lipa Pole Pole" : d.type}:{" "}
+                            {fmtKsh(d.amount_ksh)}
                             {d.description ? ` — ${d.description}` : ""}
                           </p>
                         ))}
@@ -474,18 +564,28 @@ function Payments() {
       </ShellCard>
 
       {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowAdd(false)}>
-          <div className="w-full max-w-md rounded-lg bg-card p-6 shadow-xl ring-1 ring-border" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setShowAdd(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-lg bg-card p-6 shadow-xl ring-1 ring-border"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="mb-4 flex items-center gap-2">
               <Receipt className="size-5 text-maziwa-green-deep" />
               <h2 className="font-bold">Process Farmer Payment</h2>
             </div>
             <p className="mb-4 text-sm text-muted-foreground">
-              This will calculate earnings from unpaid accepted collections in the selected period, automatically deduct any active Lipa Pole Pole installment, and record the net payout. Collections already paid in a prior payment are excluded.
+              This will calculate earnings from unpaid accepted collections in the selected period,
+              automatically deduct any active Lipa Pole Pole installment, and record the net payout.
+              Collections already paid in a prior payment are excluded.
             </p>
             <form onSubmit={processPayment} className="space-y-4">
               <div>
-                <label className={labelClass} htmlFor="pay_farmer">Farmer</label>
+                <label className={labelClass} htmlFor="pay_farmer">
+                  Farmer
+                </label>
                 <select
                   id="pay_farmer"
                   className={fieldClass}
@@ -502,7 +602,9 @@ function Payments() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelClass} htmlFor="pay_start">Period Start</label>
+                  <label className={labelClass} htmlFor="pay_start">
+                    Period Start
+                  </label>
                   <input
                     id="pay_start"
                     type="date"
@@ -512,7 +614,9 @@ function Payments() {
                   />
                 </div>
                 <div>
-                  <label className={labelClass} htmlFor="pay_end">Period End</label>
+                  <label className={labelClass} htmlFor="pay_end">
+                    Period End
+                  </label>
                   <input
                     id="pay_end"
                     type="date"
@@ -523,7 +627,9 @@ function Payments() {
                 </div>
               </div>
               <div>
-                <label className={labelClass} htmlFor="pay_method">Payment Method</label>
+                <label className={labelClass} htmlFor="pay_method">
+                  Payment Method
+                </label>
                 <select
                   id="pay_method"
                   className={fieldClass}
@@ -537,7 +643,9 @@ function Payments() {
                 </select>
               </div>
               <div>
-                <label className={labelClass} htmlFor="pay_ref">Reference (optional)</label>
+                <label className={labelClass} htmlFor="pay_ref">
+                  Reference (optional)
+                </label>
                 <input
                   id="pay_ref"
                   className={fieldClass}
@@ -547,7 +655,9 @@ function Payments() {
                 />
               </div>
               <div>
-                <label className={labelClass} htmlFor="pay_notes">Notes (optional)</label>
+                <label className={labelClass} htmlFor="pay_notes">
+                  Notes (optional)
+                </label>
                 <input
                   id="pay_notes"
                   className={fieldClass}
@@ -569,25 +679,46 @@ function Payments() {
       )}
 
       {showLedger && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowLedger(false)}>
-          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-lg bg-card shadow-xl ring-1 ring-border" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setShowLedger(false)}
+        >
+          <div
+            className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-lg bg-card shadow-xl ring-1 ring-border"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-border p-5">
               <div className="flex items-center gap-2">
                 <BookOpen className="size-5 text-maziwa-blue" />
                 <h2 className="font-bold">Farmer Ledger — Running Balances</h2>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="h-8" onClick={exportLedgerCsv} disabled={!balances || balances.length === 0}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  onClick={exportLedgerCsv}
+                  disabled={!balances || balances.length === 0}
+                >
                   <Download className="size-3.5" /> CSV
                 </Button>
-                <button onClick={() => setShowLedger(false)} className="text-muted-foreground hover:text-foreground text-sm">Close</button>
+                <button
+                  onClick={() => setShowLedger(false)}
+                  className="text-muted-foreground hover:text-foreground text-sm"
+                >
+                  Close
+                </button>
               </div>
             </div>
             <div className="overflow-auto p-5">
               {balances === null ? (
-                <div className="flex justify-center py-10"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>
+                <div className="flex justify-center py-10">
+                  <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                </div>
               ) : balances.length === 0 ? (
-                <p className="py-10 text-center text-sm text-muted-foreground">No farmer balances to display.</p>
+                <p className="py-10 text-center text-sm text-muted-foreground">
+                  No farmer balances to display.
+                </p>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
@@ -605,17 +736,30 @@ function Payments() {
                   <tbody>
                     {balances.map((b) => {
                       const owed = Number(b.outstanding_balance);
-                      const owedClass = owed > 0 ? "text-maziwa-orange-deep font-bold" : owed < 0 ? "text-muted-foreground" : "text-maziwa-green-deep font-bold";
+                      const owedClass =
+                        owed > 0
+                          ? "text-maziwa-orange-deep font-bold"
+                          : owed < 0
+                            ? "text-muted-foreground"
+                            : "text-maziwa-green-deep font-bold";
                       return (
                         <tr key={b.farmer_code} className="border-b border-border/60 last:border-0">
                           <td className="py-3 pr-2">
                             <p className="font-semibold">{b.full_name}</p>
                             <p className="text-xs text-muted-foreground">{b.farmer_code}</p>
                           </td>
-                          <td className="pr-2 text-right font-semibold">{fmtKsh(Number(b.total_earnings))}</td>
+                          <td className="pr-2 text-right font-semibold">
+                            {fmtKsh(Number(b.total_earnings))}
+                          </td>
                           <td className="pr-2 text-right">{fmtKsh(Number(b.total_paid))}</td>
-                          <td className="pr-2 text-right text-maziwa-purple">{Number(b.total_deductions) > 0 ? fmtKsh(Number(b.total_deductions)) : "—"}</td>
-                          <td className="pr-2 text-right text-maziwa-green-deep font-semibold">{fmtKsh(Number(b.total_net_paid))}</td>
+                          <td className="pr-2 text-right text-maziwa-purple">
+                            {Number(b.total_deductions) > 0
+                              ? fmtKsh(Number(b.total_deductions))
+                              : "—"}
+                          </td>
+                          <td className="pr-2 text-right text-maziwa-green-deep font-semibold">
+                            {fmtKsh(Number(b.total_net_paid))}
+                          </td>
                           <td className={`pr-2 text-right ${owedClass}`}>
                             {owed > 0 && <AlertCircle className="mr-1 inline size-3" />}
                             {owed === 0 && <CheckCircle2 className="mr-1 inline size-3" />}
@@ -623,7 +767,9 @@ function Payments() {
                             {owed < 0 && " (overpaid)"}
                           </td>
                           <td className="pr-2 text-right text-xs">
-                            {b.unpaid_count > 0 ? `${b.unpaid_count} of ${b.collection_count}` : `0 of ${b.collection_count}`}
+                            {b.unpaid_count > 0
+                              ? `${b.unpaid_count} of ${b.collection_count}`
+                              : `0 of ${b.collection_count}`}
                           </td>
                           <td className="text-right text-xs text-muted-foreground whitespace-nowrap">
                             {b.last_paid_at ? fmtDate(b.last_paid_at) : "Never"}
@@ -641,14 +787,19 @@ function Payments() {
       {mpesaTarget && (
         <MpesaCheckoutModal
           open={!!mpesaTarget}
-          onClose={() => { setMpesaTarget(null); loadAllPayments(); }}
+          onClose={() => {
+            setMpesaTarget(null);
+            loadAllPayments();
+          }}
           farmerCode={mpesaTarget.farmerCode}
           farmerName={mpesaTarget.farmerName}
           defaultPhone={mpesaTarget.phone}
           amount={mpesaTarget.amount}
           paymentId={mpesaTarget.paymentId}
-          initiatedBy={user.id}
-          onSuccess={() => { loadAllPayments(); loadBalances(); }}
+          onSuccess={() => {
+            loadAllPayments();
+            loadBalances();
+          }}
         />
       )}
     </AppShell>

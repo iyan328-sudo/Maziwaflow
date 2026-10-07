@@ -70,7 +70,9 @@ Deno.serve(async (req: Request) => {
         user_metadata: {
           full_name: body.full_name ?? "",
           collection_centre: body.collection_centre ?? "",
-          role: body.role,
+        },
+        app_metadata: {
+          maziwaflow_role: body.role,
         },
       });
 
