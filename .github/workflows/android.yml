@@ -26,8 +26,27 @@ jobs:
         working-directory: "Maziwaflow  mobile app"
         run: npm ci
 
+      - name: Validate production Supabase configuration
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: "Maziwaflow  mobile app"
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "::error::Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in GitHub Actions secrets before deploying."
+            exit 1
+          fi
+          if [ "$VITE_SUPABASE_URL" = "https://your-project.supabase.co" ] || [ "$VITE_SUPABASE_ANON_KEY" = "your-anon-key" ]; then
+            echo "::error::Placeholder Supabase configuration cannot be deployed."
+            exit 1
+          fi
+
       - name: Build web app
         working-directory: "Maziwaflow  mobile app"
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
 
       - name: Deploy to Cloudflare Workers
