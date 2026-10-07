@@ -4,6 +4,14 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { SyncMenu } from "@/components/StageTools";
 import { NotificationBell } from "@/components/NotificationBell";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 export function AppShell({
   title,
@@ -56,13 +64,37 @@ export function AppShell({
       <main className={`mx-auto w-full ${width} flex-1 px-4 pt-6 pb-24 sm:px-5 sm:pt-8`}>
         {children}
       </main>
-      <Button
-        type="button"
-        aria-label="Help"
-        className="fab-help fixed right-5 bottom-5 z-30 sm:right-8 sm:bottom-8"
-      >
-        ?
-      </Button>
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button
+            type="button"
+            aria-label="Help"
+            className="fab-help fixed right-5 bottom-5 z-30 sm:right-8 sm:bottom-8"
+          >
+            ?
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Quick help</DialogTitle>
+            <DialogDescription>Find your way around Maziwaflow Mobile.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              <strong className="text-foreground">Dashboard:</strong> choose an action to record
+              milk, browse collections, or open other tools available to your account.
+            </p>
+            <p>
+              <strong className="text-foreground">Offline work:</strong> unsynced collection entries
+              are saved on this device and sync when you reconnect.
+            </p>
+            <p>
+              <strong className="text-foreground">Need access?</strong> Contact an administrator for
+              account or staff-role assistance.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

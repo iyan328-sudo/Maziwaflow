@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Droplets, Loader2 } from "lucide-react";
@@ -39,6 +39,24 @@ function AuthPage() {
     password: "",
     full_name: "",
   });
+
+  useEffect(() => {
+    const isEmailConfirmation = new URLSearchParams(window.location.search).get("verified") === "1";
+    if (!isEmailConfirmation) return;
+
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (
+        (event === "INITIAL_SESSION" || event === "SIGNED_IN") &&
+        session?.user.email_confirmed_at
+      ) {
+        toast.success("Email verified successfully.");
+        navigate({ to: "/dashboard" });
+      }
+    });
+
+    return () => data.subscription.unsubscribe();
+  }, [navigate]);
+
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -59,7 +77,10 @@ function AuthPage() {
           email: p.data.email,
           password: p.data.password,
           options: {
-            emailRedirectTo: window.location.origin,
+            emailRedirectTo: new URL(
+              "/auth?verified=1",
+              import.meta.env["VITE_APP_URL"]?.trim() || window.location.origin,
+            ).toString(),
             data: {
               full_name: p.data.full_name,
             },

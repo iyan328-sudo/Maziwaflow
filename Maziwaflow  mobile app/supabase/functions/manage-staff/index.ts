@@ -83,6 +83,9 @@ Deno.serve(async (req: Request) => {
           collection_centre: body.collection_centre ?? "",
           role: body.role,
         },
+        app_metadata: {
+          maziwaflow_role: body.role,
+        },
       });
 
       if (createError) {

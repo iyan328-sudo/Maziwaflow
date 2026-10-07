@@ -29,6 +29,14 @@ npm i
 npm run dev
 ```
 
+## Email confirmation redirects
+
+Set `VITE_APP_URL` to the public application origin for deployed builds. If it is
+omitted, email confirmation links use the origin currently serving the app. Add
+the resulting `/auth?verified=1` callback URL to the Supabase Auth redirect URL
+allowlist. Supabase records successful confirmation in
+`auth.users.email_confirmed_at`.
+
 ## M-Pesa Daraja 3.0
 
 The Payments screen supports two distinct transaction directions:

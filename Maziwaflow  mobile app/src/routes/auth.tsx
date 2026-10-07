@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Droplets, Loader2, User, Users, Shield } from "lucide-react";
@@ -57,6 +57,24 @@ function AuthPage() {
     collection_centre: "",
     phone: "",
   });
+
+  useEffect(() => {
+    const isEmailConfirmation = new URLSearchParams(window.location.search).get("verified") === "1";
+    if (!isEmailConfirmation) return;
+
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (
+        (event === "INITIAL_SESSION" || event === "SIGNED_IN") &&
+        session?.user.email_confirmed_at
+      ) {
+        toast.success("Email verified successfully.");
+        navigate({ to: "/dashboard" });
+      }
+    });
+
+    return () => data.subscription.unsubscribe();
+  }, [navigate]);
+
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -67,8 +85,31 @@ function AuthPage() {
       if (mode === "signin") {
         const p = signInSchema.safeParse(form);
         if (!p.success) return void toast.error(p.error.issues[0]?.message ?? "Invalid input");
-        const { error } = await supabase.auth.signInWithPassword(p.data);
+        const { data, error } = await supabase.auth.signInWithPassword(p.data);
         if (error) return void toast.error(error.message);
+
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", data.user.id)
+          .maybeSingle();
+        if (profileError || !profile) {
+          const { error: signOutError } = await supabase.auth.signOut();
+          const message = profileError?.message ?? "Could not find an account role.";
+          return void toast.error(
+            signOutError ? `${message} Sign-out failed: ${signOutError.message}` : message,
+          );
+        }
+        if (profile.role !== selectedRole) {
+          const { error: signOutError } = await supabase.auth.signOut();
+          const actualRole = profile.role.charAt(0).toUpperCase() + profile.role.slice(1);
+          toast.error(
+            signOutError
+              ? `This account is assigned the ${actualRole} role, not ${selectedRole}. Sign-out failed: ${signOutError.message}`
+              : `This account is assigned the ${actualRole} role, not ${SIGNIN_ROLE_INFO.find((role) => role.id === selectedRole)?.label}. Ask an administrator to update its role.`,
+          );
+          return;
+        }
         navigate({ to: "/dashboard" });
       } else {
         const p = signUpSchema.safeParse(form);
@@ -77,7 +118,10 @@ function AuthPage() {
           email: p.data.email,
           password: p.data.password,
           options: {
-            emailRedirectTo: window.location.origin,
+            emailRedirectTo: new URL(
+              "/auth?verified=1",
+              import.meta.env["VITE_APP_URL"]?.trim() || window.location.origin,
+            ).toString(),
             data: {
               full_name: p.data.full_name,
               collection_centre: p.data.collection_centre || undefined,
