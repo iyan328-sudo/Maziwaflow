@@ -9,7 +9,8 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 // Public (publishable) Supabase values — safe to ship to the browser.
 // Used as a fallback so the app never boots without its backend connection.
 const SUPABASE_URL =
-  process.env.VITE_SUPABASE_URL || "https://sbqxpvhfhajueiwtndrw.supabase.cSUPABASE_ANON_KEY =
+  process.env.VITE_SUPABASE_URL || "https://sbqxpvhfhajueiwtndrw.supabase.co";
+const SUPABASE_ANON_KEY =
   process.env.VITE_SUPABASE_ANON_KEY ||
   process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNicXhwdmhmaGFqdWVpd3RuZHJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MDE3NDgsImV4cCI6MjEwNjA3Nzc0OH0.5bVrWU33Vh8iZ1R-1qtOOooRC9fVH7Ztkuy0FrCZi_s";
