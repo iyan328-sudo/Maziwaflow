@@ -1,0 +1,13 @@
+project_id = "sbqxpvhfhajueiwtndrw"
+
+[functions.send-sms]
+verify_jwt = true
+
+[functions.manage-staff]
+verify_jwt = true
+
+[functions.mpesa-stk-push]
+verify_jwt = true
+
+[functions.mpesa-callback]
+verify_jwt = false
