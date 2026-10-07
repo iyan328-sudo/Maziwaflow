@@ -60,6 +60,7 @@ export type Database = {
       collections: {
         Row: {
           collected_at: string;
+          client_sync_id: string | null;
           created_at: string;
           farmer_code: string;
           id: string;
@@ -72,6 +73,7 @@ export type Database = {
         };
         Insert: {
           collected_at?: string;
+          client_sync_id?: string | null;
           created_at?: string;
           farmer_code: string;
           id?: string;
@@ -84,6 +86,7 @@ export type Database = {
         };
         Update: {
           collected_at?: string;
+          client_sync_id?: string | null;
           created_at?: string;
           farmer_code?: string;
           id?: string;

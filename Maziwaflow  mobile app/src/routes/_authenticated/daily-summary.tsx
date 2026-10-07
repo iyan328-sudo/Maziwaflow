@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell, ShellCard, fieldClass } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { escapeHtml, toCsvCell } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/daily-summary")({
   head: () => ({
@@ -183,7 +184,7 @@ function DailySummary() {
         val.toFixed(0),
         fmtTime(r.collected_at),
       ]
-        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+        .map(toCsvCell)
         .join(",");
     });
     const csv = [headers.join(","), ...lines].join("\n");
@@ -203,8 +204,8 @@ function DailySummary() {
       .map(
         (f) => `
       <tr>
-        <td>${f.name}</td>
-        <td>${f.code}</td>
+        <td>${escapeHtml(f.name)}</td>
+        <td>${escapeHtml(f.code)}</td>
         <td style="text-align:right">${f.deliveries}</td>
         <td style="text-align:right">${f.kg.toFixed(1)} kg</td>
         <td style="text-align:right">${fmtKsh(f.value)}</td>
@@ -215,7 +216,7 @@ function DailySummary() {
       .map(
         (g) => `
       <tr>
-        <td>${g.grade}</td>
+        <td>${escapeHtml(g.grade)}</td>
         <td style="text-align:right">${g.count}</td>
         <td style="text-align:right">${g.kg.toFixed(1)} kg</td>
         <td style="text-align:right">${fmtKsh(g.value)}</td>
@@ -242,7 +243,7 @@ function DailySummary() {
       </style></head><body>
       <h1>Maziwaflow Mobile</h1>
       <h2>Daily Collection Summary</h2>
-      <div class="date">${fmtFullDate(date)}</div>
+      <div class="date">${escapeHtml(fmtFullDate(date))}</div>
       <div class="summary">
         <div><p>Total Volume</p><span>${totalKg.toFixed(1)} kg</span></div>
         <div><p>Total Value</p><span>${fmtKsh(totalValue)}</span></div>

@@ -20,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell, ShellCard, fieldClass, labelClass } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { useRole } from "@/components/RoleViewContext";
+import { escapeHtml, toCsvCell } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/collections")({
   head: () => ({
@@ -190,7 +191,10 @@ function Collections() {
     });
   }, [rows, q, farmerFilter, dateRange]);
 
-  const acceptedRows = filtered.filter((r) => r.status === "Accepted");
+  const acceptedRows = useMemo(
+    () => filtered.filter((r) => r.status === "Accepted"),
+    [filtered],
+  );
   const totalKg = acceptedRows.reduce((a, r) => a + Number(r.quantity_kg), 0);
   const totalValue = acceptedRows.reduce(
     (a, r) => a + Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0),
@@ -261,7 +265,7 @@ function Collections() {
         d.toLocaleDateString("en-KE"),
         d.toLocaleTimeString("en-KE"),
       ]
-        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+        .map(toCsvCell)
         .join(",");
     });
     const csv = [headers.join(","), ...lines].join("\n");
@@ -287,14 +291,14 @@ function Collections() {
       .map(
         (r) => `
       <tr>
-        <td>${r.farmers?.full_name ?? r.farmer_code}</td>
-        <td>${r.farmer_code}</td>
+        <td>${escapeHtml(r.farmers?.full_name ?? r.farmer_code)}</td>
+        <td>${escapeHtml(r.farmer_code)}</td>
         <td style="text-align:right">${Number(r.quantity_kg)} kg</td>
-        <td>${r.quality_grade}</td>
+        <td>${escapeHtml(r.quality_grade)}</td>
         <td>${r.price_per_ksh ? fmtKsh(Number(r.price_per_ksh)) : "—"}</td>
         <td style="text-align:right">${r.status === "Accepted" ? fmtKsh(Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0)) : "—"}</td>
         <td>${fmtFullDate(r.collected_at)} ${fmtTime(r.collected_at)}</td>
-        <td>${r.status}</td>
+        <td>${escapeHtml(r.status)}</td>
       </tr>`,
       )
       .join("");
@@ -318,8 +322,8 @@ function Collections() {
       <h1>Maziwaflow Mobile</h1>
       <h2>Collection Statement</h2>
       <div class="meta">
-        <div><strong>Farmer</strong>${farmerName}</div>
-        <div><strong>Period</strong>${periodLabel}</div>
+        <div><strong>Farmer</strong>${escapeHtml(farmerName)}</div>
+        <div><strong>Period</strong>${escapeHtml(periodLabel)}</div>
         <div><strong>Generated</strong>${new Date().toLocaleString("en-KE")}</div>
       </div>
       <div class="summary">

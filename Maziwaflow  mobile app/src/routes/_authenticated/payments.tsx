@@ -20,6 +20,7 @@ import { AppShell, ShellCard, fieldClass, labelClass } from "@/components/AppShe
 import { Button } from "@/components/ui/button";
 import { useRole } from "@/components/RoleViewContext";
 import { MpesaCheckoutModal } from "@/components/MpesaCheckoutModal";
+import { escapeHtml, toCsvCell } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/payments")({
   head: () => ({
@@ -189,17 +190,24 @@ function Payments() {
       plan_deducted?: boolean;
       collections_paid?: number;
       message?: string;
+      status?: string;
     };
     if (result?.message) {
       return void toast.info(result.message);
     }
-    toast.success(
-      `Payment processed: ${fmtKsh(result?.net_ksh ?? 0)} net` +
-        (result?.collections_paid ? ` (${result.collections_paid} collections paid)` : "") +
-        (result?.plan_deducted
-          ? ` (${fmtKsh(result?.deduction_ksh ?? 0)} Lipa Pole Pole deducted)`
-          : ""),
-    );
+    if (result?.status === "pending") {
+      toast.info(
+        `Payment prepared: ${fmtKsh(result.net_ksh ?? 0)} awaiting M-Pesa confirmation.`,
+      );
+    } else {
+      toast.success(
+        `Payment processed: ${fmtKsh(result?.net_ksh ?? 0)} net` +
+          (result?.collections_paid ? ` (${result.collections_paid} collections paid)` : "") +
+          (result?.plan_deducted
+            ? ` (${fmtKsh(result?.deduction_ksh ?? 0)} Lipa Pole Pole deducted)`
+            : ""),
+      );
+    }
     setShowAdd(false);
     setForm({ ...form, reference: "", notes: "" });
     loadAllPayments();
@@ -263,7 +271,7 @@ function Payments() {
         p.reference ?? "",
         p.status,
       ]
-        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+        .map(toCsvCell)
         .join(","),
     );
     const csv = [headers.join(","), ...lines].join("\n");
@@ -304,7 +312,7 @@ function Payments() {
         b.unpaid_count,
         b.last_paid_at ? fmtFullDate(b.last_paid_at) : "Never",
       ]
-        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+        .map(toCsvCell)
         .join(","),
     );
     const csv = [headers.join(","), ...lines].join("\n");
@@ -328,13 +336,13 @@ function Payments() {
         (p) => `
       <tr>
         <td>${fmtFullDate(p.created_at)}</td>
-        <td>${p.farmers?.full_name ?? p.farmer_code}</td>
+        <td>${escapeHtml(p.farmers?.full_name ?? p.farmer_code)}</td>
         <td>${fmtFullDate(p.period_start)} — ${fmtFullDate(p.period_end)}</td>
         <td style="text-align:right">${fmtKsh(Number(p.gross_ksh))}</td>
         <td style="text-align:right">${Number(p.deduction_ksh) > 0 ? fmtKsh(Number(p.deduction_ksh)) : "—"}</td>
         <td style="text-align:right;font-weight:bold">${fmtKsh(Number(p.net_ksh))}</td>
-        <td>${p.payment_method ?? "—"}</td>
-        <td>${p.reference ?? "—"}</td>
+        <td>${escapeHtml(p.payment_method ?? "—")}</td>
+        <td>${escapeHtml(p.reference ?? "—")}</td>
       </tr>`,
       )
       .join("");
@@ -358,7 +366,7 @@ function Payments() {
       <h1>Maziwaflow Mobile</h1>
       <h2>Payment Statement</h2>
       <div class="meta">
-        <div><strong>Farmer</strong>${farmerName}</div>
+        <div><strong>Farmer</strong>${escapeHtml(farmerName)}</div>
         <div><strong>Generated</strong>${new Date().toLocaleString("en-KE")}</div>
       </div>
       <div class="summary">
@@ -544,14 +552,17 @@ function Payments() {
                     {p.reference && (
                       <p className="mt-1 text-xs text-muted-foreground">Ref: {p.reference}</p>
                     )}
-                    {canCreate && p.status === "completed" && !p.reference && (
-                      <button
-                        onClick={() => openMpesa(p)}
-                        className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-maziwa-green/10 px-3 py-1.5 text-xs font-bold text-maziwa-green-deep ring-1 ring-maziwa-green/20 transition hover:bg-maziwa-green/20"
-                      >
-                        <Smartphone className="size-3.5" /> Pay via M-Pesa
-                      </button>
-                    )}
+                    {canCreate &&
+                      p.status === "pending" &&
+                      p.payment_method?.toLowerCase() === "m-pesa" &&
+                      !p.reference && (
+                        <button
+                          onClick={() => openMpesa(p)}
+                          className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-maziwa-green/10 px-3 py-1.5 text-xs font-bold text-maziwa-green-deep ring-1 ring-maziwa-green/20 transition hover:bg-maziwa-green/20"
+                        >
+                          <Smartphone className="size-3.5" /> Pay via M-Pesa
+                        </button>
+                      )}
                   </div>
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
                     {fmtDate(p.created_at)}

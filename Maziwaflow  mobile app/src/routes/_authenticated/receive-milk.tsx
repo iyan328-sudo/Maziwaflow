@@ -115,7 +115,7 @@ function ReceiveMilk() {
     if (!online) {
       const farmer = farmers.find((x) => x.farmer_code === p.data.farmer_code);
       const localId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      addPendingCollection({
+      const saved = addPendingCollection({
         localId,
         farmer_code: p.data.farmer_code,
         farmer_name: farmer?.full_name ?? p.data.farmer_code,
@@ -128,6 +128,11 @@ function ReceiveMilk() {
         synced: false,
         error: null,
       });
+      if (!saved) {
+        setBusy(false);
+        toast.error("Could not save offline. Free device storage and try again.");
+        return;
+      }
       toast.success(
         `Saved offline — ${p.data.quantity_kg} kg from ${farmer?.full_name ?? p.data.farmer_code}. Will sync when online.`,
       );
@@ -161,38 +166,21 @@ function ReceiveMilk() {
 
     if (p.data.quality_grade !== "Rejected") {
       try {
-        const { data: farmerRow } = await supabase
-          .from("farmers")
-          .select("phone")
-          .eq("farmer_code", p.data.farmer_code)
-          .maybeSingle();
-
-        const { data: cumRows } = await supabase
-          .from("collections")
-          .select("quantity_kg")
-          .eq("farmer_code", p.data.farmer_code)
-          .eq("status", "Accepted");
-
-        const cumulativeKg = (cumRows ?? []).reduce((a, r) => a + Number(r.quantity_kg), 0);
-
         const smsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-sms`;
-        await fetch(smsUrl, {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const smsResponse = await fetch(smsUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           },
-          body: JSON.stringify({
-            farmer_code: p.data.farmer_code,
-            farmer_name: farmer?.full_name,
-            phone: farmerRow?.phone ?? null,
-            quantity_kg: p.data.quantity_kg,
-            cumulative_kg: cumulativeKg,
-            collected_at: new Date(p.data.collected_at).toLocaleString("en-KE"),
-          }),
+          body: JSON.stringify({}),
         });
+        if (!smsResponse.ok) {
+          toast.warning("Collection saved, but SMS delivery is unavailable.");
+        }
       } catch {
-        // SMS failure shouldn't block the collection save
+        toast.warning("Collection saved, but SMS delivery is unavailable.");
       }
     }
 

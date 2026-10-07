@@ -1,10 +1,17 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Loader2, Smartphone, CheckCircle2, XCircle, X } from "lucide-react";
+import { Loader2, Smartphone, CheckCircle2, XCircle, X, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 
-type MpesaStatus = "idle" | "sending" | "waiting" | "success" | "failed" | "cancelled";
+type MpesaStatus =
+  | "idle"
+  | "sending"
+  | "waiting"
+  | "success"
+  | "failed"
+  | "cancelled"
+  | "review";
 
 type Props = {
   open: boolean;
@@ -85,6 +92,12 @@ export function MpesaCheckoutModal({
           setStatus("cancelled");
           setResultMsg(data.result_desc ?? "Payment was cancelled.");
           stopPolling();
+        } else if (data.status === "verification_failed") {
+          setStatus("review");
+          setResultMsg(
+            "Daraja details need manual verification. Do not retry or issue another payment until reviewed.",
+          );
+          stopPolling();
         }
       }, 5000);
     },
@@ -119,6 +132,11 @@ export function MpesaCheckoutModal({
       const data = await resp.json();
 
       if (!resp.ok || data.error) {
+        if (data.requires_review) {
+          setStatus("review");
+          setResultMsg(data.error ?? "Payment requires manual verification.");
+          return;
+        }
         setStatus("failed");
         setResultMsg(data.error ?? "Could not initiate M-Pesa payment.");
         return;
@@ -258,15 +276,30 @@ export function MpesaCheckoutModal({
               </p>
             )}
             <Button
-              onClick={() => {
-                setStatus("idle");
-                setResultMsg("");
-                setCheckoutRequestId(null);
-              }}
+              onClick={handleClose}
               variant="outline"
               className="mt-6 h-10 rounded-lg px-8 text-sm font-bold"
             >
-              Try Again
+              Close
+            </Button>
+          </div>
+        )}
+
+        {status === "review" && (
+          <div className="flex flex-col items-center py-8">
+            <div className="flex size-16 items-center justify-center rounded-full bg-amber-500/10">
+              <AlertTriangle className="size-8 text-amber-600" />
+            </div>
+            <p className="mt-4 text-center text-sm font-bold text-amber-700">
+              Payment Requires Review
+            </p>
+            {resultMsg && (
+              <p className="mt-1.5 max-w-xs text-center text-xs text-muted-foreground">
+                {resultMsg}
+              </p>
+            )}
+            <Button onClick={handleClose} className="mt-6 h-10 rounded-lg px-8 text-sm font-bold">
+              Close
             </Button>
           </div>
         )}

@@ -6,105 +6,50 @@ import {
   jsonResponse,
 } from "../_shared/security.ts";
 
-const allowedOrigins = new Set(["http://localhost:5173", "http://127.0.0.1:5173"]);
-
-function validatePayload(payload: unknown) {
-  if (!payload || typeof payload !== "object") {
-    return { valid: false, message: "Request body must be an object" };
-  }
-
-  const value = payload as Record<string, unknown>;
-  const phone = typeof value.phone === "string" ? value.phone.trim() : "";
-  const quantityKg = Number(value.quantity_kg);
-  const cumulativeKg = Number(value.cumulative_kg);
-
-  if (!phone || !/^\+?[1-9]\d{8,14}$/.test(phone)) {
-    return { valid: false, message: "Valid phone number is required" };
-  }
-
-  if (
-    !Number.isFinite(quantityKg) ||
-    quantityKg < 0 ||
-    !Number.isFinite(cumulativeKg) ||
-    cumulativeKg < 0
-  ) {
-    return { valid: false, message: "Quantity and cumulative totals must be valid numbers" };
-  }
-
-  return {
-    valid: true,
-    data: {
-      collection_id:
-        typeof value.collection_id === "string"
-          ? value.collection_id.trim().slice(0, 100)
-          : undefined,
-      farmer_code:
-        typeof value.farmer_code === "string" ? value.farmer_code.trim().slice(0, 50) : undefined,
-      farmer_name:
-        typeof value.farmer_name === "string" ? value.farmer_name.trim().slice(0, 100) : undefined,
-      phone,
-      quantity_kg: quantityKg,
-      cumulative_kg: cumulativeKg,
-      collected_at:
-        typeof value.collected_at === "string" ? value.collected_at : new Date().toISOString(),
-    },
-  };
+function createServiceClient() {
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) throw new Error("Supabase service credentials are not configured");
+  return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    const origin = req.headers.get("Origin");
-    const headers =
-      origin && allowedOrigins.has(origin)
-        ? getCorsHeaders(req)
-        : { "Access-Control-Allow-Origin": "null", Vary: "Origin" };
-    return new Response(null, { status: 200, headers: { ...headers, ...getSecurityHeaders() } });
+    return new Response(null, {
+      status: 204,
+      headers: { ...getCorsHeaders(req), ...getSecurityHeaders() },
+    });
   }
-
-  if (isRateLimited(req)) {
-    return jsonResponse(req, { error: "Too many requests" }, 429);
-  }
+  if (req.method !== "POST") return jsonResponse(req, { error: "Method not allowed" }, 405);
+  if (isRateLimited(req)) return jsonResponse(req, { error: "Too many requests" }, 429);
 
   try {
-    const parsed = validatePayload(await req.json());
-    if (!parsed.valid) {
-      return jsonResponse(req, { error: parsed.message }, 400);
+    const token = req.headers.get("Authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
+    if (!token) return jsonResponse(req, { error: "Authentication is required" }, 401);
+
+    const service = createServiceClient();
+    const { data: auth, error: authError } = await service.auth.getUser(token);
+    if (authError || !auth.user) {
+      return jsonResponse(req, { error: "Invalid or expired session" }, 401);
     }
 
-    const {
-      collection_id,
-      farmer_code,
-      farmer_name,
-      phone,
-      quantity_kg,
-      cumulative_kg,
-      collected_at,
-    } = parsed.data;
+    const { data: profile, error: profileError } = await service
+      .from("profiles")
+      .select("role")
+      .eq("id", auth.user.id)
+      .maybeSingle();
+    if (profileError) throw profileError;
+    if (profile?.role !== "admin" && profile?.role !== "clerk") {
+      return jsonResponse(req, { error: "Only admins and clerks can request SMS alerts" }, 403);
+    }
 
-    const message = `MaziwaFlow: Hi ${farmer_name ?? farmer_code}, ${quantity_kg} kg of milk recorded on ${collected_at}. Your cumulative total is ${cumulative_kg} kg.`;
-
-    // Placeholder for actual SMS gateway integration.
-    // In production, this would call an SMS provider like Africa's Talking,
-    // Twilio, or Vonage. The message is logged here for development.
-    console.log(`SMS to ${phone}: ${message}`);
-
-    // Record the SMS attempt in notifications metadata via service role
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    return jsonResponse(
+      req,
+      { sent: false, error: "SMS delivery is not configured" },
+      503,
     );
-
-    await supabase.from("notifications").insert({
-      user_id: null,
-      farmer_code,
-      title: "SMS Alert Sent",
-      body: message,
-      type: "collection",
-      metadata: { collection_id, phone, channel: "sms" },
-    });
-
-    return jsonResponse(req, { sent: true, message }, 200);
-  } catch (err) {
-    return jsonResponse(req, { error: String(err) }, 500);
+  } catch (error) {
+    console.error("SMS request failed", error);
+    return jsonResponse(req, { error: "Could not process the SMS request" }, 500);
   }
 });

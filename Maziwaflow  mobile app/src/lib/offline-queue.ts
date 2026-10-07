@@ -17,6 +17,8 @@ export type PendingCollection = {
   error: string | null;
 };
 
+let syncPromise: Promise<SyncResult[]> | null = null;
+
 type FarmersCache = { farmer_code: string; full_name: string }[];
 type PricesCache = Record<string, number>;
 
@@ -29,19 +31,21 @@ export function getPendingCollections(): PendingCollection[] {
   }
 }
 
-export function savePendingCollections(items: PendingCollection[]) {
+export function savePendingCollections(items: PendingCollection[]): boolean {
   try {
     localStorage.setItem(PENDING_KEY, JSON.stringify(items));
+    return true;
   } catch {
-    // storage full or unavailable — nothing we can do
+    return false;
   }
 }
 
-export function addPendingCollection(item: PendingCollection) {
+export function addPendingCollection(item: PendingCollection): boolean {
   const items = getPendingCollections();
   items.push(item);
-  savePendingCollections(items);
+  if (!savePendingCollections(items)) return false;
   notifyUpdate();
+  return true;
 }
 
 export function removePendingCollection(localId: string) {
@@ -117,7 +121,17 @@ type SyncResult = {
   error: string | null;
 };
 
-export async function syncPendingCollections(
+export function syncPendingCollections(
+  buildInsert: (p: PendingCollection) => SyncPayload,
+): Promise<SyncResult[]> {
+  if (syncPromise) return syncPromise;
+  syncPromise = syncPendingCollectionsNow(buildInsert).finally(() => {
+    syncPromise = null;
+  });
+  return syncPromise;
+}
+
+async function syncPendingCollectionsNow(
   buildInsert: (p: PendingCollection) => SyncPayload,
 ): Promise<SyncResult[]> {
   const pending = getPendingCollections().filter((p) => !p.synced);
@@ -128,7 +142,10 @@ export async function syncPendingCollections(
 
   for (const item of pending) {
     const payload = buildInsert(item);
-    const { error } = await supabase.from("collections").insert(payload);
+    const { error } = await supabase.from("collections").upsert(
+      { ...payload, client_sync_id: item.localId },
+      { onConflict: "client_sync_id", ignoreDuplicates: true },
+    );
     if (error) {
       results.push({ localId: item.localId, success: false, error: error.message });
       updatePendingCollection(item.localId, { error: error.message });
