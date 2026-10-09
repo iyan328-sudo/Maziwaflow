@@ -57,3 +57,24 @@ To enable automatic deployment:
 To build locally, run `npm run build` from this app directory. The Cloudflare
 Worker entry point and its Wrangler configuration are generated under
 `.output/server/`.
+
+## Build an Android APK
+
+The Android app loads the deployed, server-rendered web app, so it needs an
+HTTPS URL. The `Build Android APK` GitHub Actions workflow accepts this URL
+when run manually; it defaults to `https://maziwaflow-app.pages.dev`. Push and
+tag builds use the `CAPACITOR_SERVER_URL` repository variable when set, and
+otherwise use that same default.
+
+To build locally, install Android Studio/SDK and JDK 21, then run:
+
+```sh
+npm run build
+export CAPACITOR_SERVER_URL=https://maziwaflow-app.pages.dev
+npx cap add android
+npx cap sync android
+(cd android && ./gradlew assembleDebug)
+```
+
+The debug APK is written to
+`android/app/build/outputs/apk/debug/app-debug.apk`.

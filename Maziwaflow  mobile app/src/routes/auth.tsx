@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Droplets, Loader2, User, Users, Shield } from "lucide-react";
+import { Droplets, Loader2, User, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { fieldClass, labelClass } from "@/components/AppShell";
@@ -23,16 +23,11 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
-type Role = "clerk" | "farmer" | "admin";
+type SignupRole = "clerk" | "farmer";
 
-const ROLE_INFO: { id: Role; label: string; desc: string; icon: LucideIcon }[] = [
+const ROLE_INFO: { id: SignupRole; label: string; desc: string; icon: LucideIcon }[] = [
   { id: "clerk", label: "Clerk", desc: "Record milk collections", icon: User },
   { id: "farmer", label: "Farmer", desc: "Track your deliveries", icon: Users },
-];
-
-const SIGNIN_ROLE_INFO: { id: Role; label: string; desc: string; icon: LucideIcon }[] = [
-  ...ROLE_INFO,
-  { id: "admin", label: "Admin", desc: "Manage the system", icon: Shield },
 ];
 
 const signInSchema = z.object({
@@ -48,7 +43,7 @@ const signUpSchema = signInSchema.extend({
 function AuthPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [selectedRole, setSelectedRole] = useState<Role>("clerk");
+  const [selectedRole, setSelectedRole] = useState<SignupRole>("clerk");
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
     email: "",
@@ -85,31 +80,8 @@ function AuthPage() {
       if (mode === "signin") {
         const p = signInSchema.safeParse(form);
         if (!p.success) return void toast.error(p.error.issues[0]?.message ?? "Invalid input");
-        const { data, error } = await supabase.auth.signInWithPassword(p.data);
+        const { error } = await supabase.auth.signInWithPassword(p.data);
         if (error) return void toast.error(error.message);
-
-        const { data: profile, error: profileError } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", data.user.id)
-          .maybeSingle();
-        if (profileError || !profile) {
-          const { error: signOutError } = await supabase.auth.signOut();
-          const message = profileError?.message ?? "Could not find an account role.";
-          return void toast.error(
-            signOutError ? `${message} Sign-out failed: ${signOutError.message}` : message,
-          );
-        }
-        if (profile.role !== selectedRole) {
-          const { error: signOutError } = await supabase.auth.signOut();
-          const actualRole = profile.role.charAt(0).toUpperCase() + profile.role.slice(1);
-          toast.error(
-            signOutError
-              ? `This account is assigned the ${actualRole} role, not ${selectedRole}. Sign-out failed: ${signOutError.message}`
-              : `This account is assigned the ${actualRole} role, not ${SIGNIN_ROLE_INFO.find((role) => role.id === selectedRole)?.label}. Ask an administrator to update its role.`,
-          );
-          return;
-        }
         navigate({ to: "/dashboard" });
       } else {
         const p = signUpSchema.safeParse(form);
@@ -142,13 +114,7 @@ function AuthPage() {
   }
 
   function toggleMode() {
-    setMode((m) => {
-      if (m === "signin") {
-        if (selectedRole === "admin") setSelectedRole("clerk");
-        return "signup";
-      }
-      return "signin";
-    });
+    setMode((m) => (m === "signin" ? "signup" : "signin"));
   }
 
   return (
@@ -166,35 +132,41 @@ function AuthPage() {
             {mode === "signin" ? "Sign In" : "Create Account"}
           </h2>
 
-          <div>
-            <span className={labelClass}>Select your role</span>
-            <div className="grid grid-cols-3 gap-2">
-              {(mode === "signin" ? SIGNIN_ROLE_INFO : ROLE_INFO).map((r) => {
-                const Icon = r.icon;
-                const active = selectedRole === r.id;
-                return (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => setSelectedRole(r.id)}
-                    className={`flex flex-col items-center gap-1.5 rounded-lg p-3 text-center transition ring-1 ${
-                      active
-                        ? "bg-maziwa-blue text-primary-foreground ring-maziwa-blue shadow-md"
-                        : "bg-background text-foreground ring-border hover:ring-maziwa-blue/50"
-                    }`}
-                  >
-                    <Icon className="size-5" />
-                    <span className="text-xs font-bold">{r.label}</span>
-                    <span
-                      className={`text-[10px] leading-tight ${active ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+          {mode === "signin" ? (
+            <p className="text-center text-sm text-muted-foreground">
+              Your account role is loaded automatically after sign in.
+            </p>
+          ) : (
+            <div>
+              <span className={labelClass}>Select account type</span>
+              <div className="grid grid-cols-2 gap-2">
+                {ROLE_INFO.map((r) => {
+                  const Icon = r.icon;
+                  const active = selectedRole === r.id;
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => setSelectedRole(r.id)}
+                      className={`flex flex-col items-center gap-1.5 rounded-lg p-3 text-center transition ring-1 ${
+                        active
+                          ? "bg-maziwa-blue text-primary-foreground ring-maziwa-blue shadow-md"
+                          : "bg-background text-foreground ring-border hover:ring-maziwa-blue/50"
+                      }`}
                     >
-                      {r.desc}
-                    </span>
-                  </button>
-                );
-              })}
+                      <Icon className="size-5" />
+                      <span className="text-xs font-bold">{r.label}</span>
+                      <span
+                        className={`text-[10px] leading-tight ${active ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                      >
+                        {r.desc}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           <form onSubmit={submit} className="space-y-4">
             {mode === "signup" && (
@@ -275,9 +247,7 @@ function AuthPage() {
               className="pill-action h-auto justify-center bg-maziwa-blue hover:bg-maziwa-blue/90 disabled:opacity-60"
             >
               {busy && <Loader2 className="size-4 animate-spin" />}
-              {mode === "signin"
-                ? `Sign In as ${SIGNIN_ROLE_INFO.find((r) => r.id === selectedRole)?.label}`
-                : "Create Account"}
+              {mode === "signin" ? "Sign In" : "Create Account"}
             </Button>
           </form>
           <Button

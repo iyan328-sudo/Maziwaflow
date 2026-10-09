@@ -12,4 +12,4 @@
 <!-- LOVABLE:END -->
 
 - Signed-in screens live under src/routes/_authenticated/ and read/write via the browser Supabase client (RLS enforced) — keeps staff data behind login without extra server layers.
-- The Stage 3 Clerk/Farmer/Admin selector is preview-only session state and never grants permissions — authorization remains enforced by Supabase RLS.
+- Signed-in roles are loaded from `profiles.role`; do not default missing or invalid roles to a staff role. Signup form metadata does not grant permissions — authorization remains enforced by Supabase RLS.

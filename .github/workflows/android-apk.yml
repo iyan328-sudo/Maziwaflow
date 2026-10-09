@@ -2,6 +2,12 @@ name: Build Android APK
 
 "on":
   workflow_dispatch:
+    inputs:
+      app_url:
+        description: Deployed Maziwaflow app URL to load in the Android app
+        required: true
+        type: string
+        default: https://maziwaflow-app.pages.dev
   push:
     branches: [main]
     tags: ["v*"]
@@ -12,6 +18,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      CAPACITOR_SERVER_URL: ${{ inputs.app_url || vars.CAPACITOR_SERVER_URL || 'https://maziwaflow-app.pages.dev' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,8 +38,12 @@ jobs:
         working-directory: "Maziwaflow  mobile app"
       - run: npm run build
         working-directory: "Maziwaflow  mobile app"
-      - name: Prepare app entry point
-        run: cp .output/public/_shell.html .output/public/index.html
+      - name: Validate deployed app URL
+        run: |
+          case "$CAPACITOR_SERVER_URL" in
+            https://*) ;;
+            *) echo "::error::CAPACITOR_SERVER_URL must be an HTTPS URL."; exit 1 ;;
+          esac
         working-directory: "Maziwaflow  mobile app"
       - name: Generate Android project
         run: npx cap add android
