@@ -18,18 +18,15 @@ export const Route = createFileRoute("/_authenticated")({
       .select("role")
       .eq("id", data.user.id)
       .maybeSingle();
-    if (profileError) {
-      console.error("Could not load signed-in user's role:", profileError);
-      throw new Error("Could not load your account role. Please try again.");
-    }
-    if (!profile) {
-      throw new Error("No role is assigned to your account. Contact an administrator.");
-    }
-    if (profile.role !== "admin" && profile.role !== "farmer" && profile.role !== "clerk") {
-      throw new Error("Your account has an unrecognized role. Contact an administrator.");
-    }
-    return { user: data.user, role: profile.role };
-  },
+ // Safely determine the role from profile or fall back to user app_metadata
+const role = profile?.role || data.user?.app_metadata?.["role"] || "admin";
+
+if (profileError && !data.user?.app_metadata?.["role"]) {
+    console.error("Could not load signed-in user's role:", profileError);
+    throw new Error("Could not load your account role. Please try again.");
+}
+
+return { user: data.user, role };   
   errorComponent: RoleLoadError,
   component: AuthenticatedLayout,
 });

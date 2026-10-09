@@ -71,7 +71,6 @@ To build locally, install Android Studio/SDK and JDK 21, then run:
 ```sh
 npm run build
 export CAPACITOR_SERVER_URL=https://maziwaflow-app.pages.dev
-npx cap add android
 npx cap sync android
 (cd android && ./gradlew assembleDebug)
 ```

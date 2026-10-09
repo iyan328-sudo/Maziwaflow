@@ -45,10 +45,8 @@ jobs:
             *) echo "::error::CAPACITOR_SERVER_URL must be an HTTPS URL."; exit 1 ;;
           esac
         working-directory: "Maziwaflow  mobile app"
-      - name: Generate Android project
-        run: npx cap add android
-        working-directory: "Maziwaflow  mobile app"
-      - run: npx cap sync android
+      - name: Sync Android project
+        run: npx cap sync android
         working-directory: "Maziwaflow  mobile app"
       - name: Build debug APK
         run: ./gradlew assembleDebug
