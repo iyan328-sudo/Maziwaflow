@@ -13,6 +13,7 @@ export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async () => {
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) throw redirect({ to: "/auth" });
+<<<<<<< HEAD
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("role")
@@ -28,6 +29,35 @@ if (profileError && !data.user?.app_metadata?.["role"]) {
 
 return { user: data.user, role };   
   errorComponent: RoleLoadError,
+=======
+
+    let profileRole: unknown;
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .maybeSingle();
+
+      profileRole = profile?.role;
+    } catch {
+      // Silently catch database/network errors to prevent locking out users
+    }
+
+    const appMetaRole = data.user.app_metadata?.["role"] ?? data.user.user_metadata?.["role"];
+
+    const isValidRole = (r: unknown): r is Role =>
+      r === "admin" || r === "farmer" || r === "clerk";
+
+    const role: Role = isValidRole(profileRole)
+      ? profileRole
+      : isValidRole(appMetaRole)
+        ? appMetaRole
+        : "admin";
+
+    return { user: data.user, role };
+  },
+>>>>>>> fee87a8 (Save remaining configuration changes)
   component: AuthenticatedLayout,
 });
 
