@@ -1,84 +1,64 @@
-import {
-  createFileRoute,
-  Link,
-  Outlet,
-  redirect,
-  type ErrorComponentProps,
-} from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
-import { RoleProvider } from "@/components/RoleViewContext";
+import { RoleProvider, type Role } from "@/components/RoleViewContext";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) throw redirect({ to: "/auth" });
-<<<<<<< HEAD
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", data.user.id)
-      .maybeSingle();
- // Safely determine the role from profile or fall back to user app_metadata
-const role = profile?.role || data.user?.app_metadata?.["role"] || "admin";
+    // 1. Verify Authentication State
+    const { data: authData, error: authError } = await supabase.auth.getUser();
 
-if (profileError && !data.user?.app_metadata?.["role"]) {
-    console.error("Could not load signed-in user's role:", profileError);
-    throw new Error("Could not load your account role. Please try again.");
-}
-
-return { user: data.user, role };   
-  errorComponent: RoleLoadError,
-=======
-
-    let profileRole: unknown;
-    try {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", data.user.id)
-        .maybeSingle();
-
-      profileRole = profile?.role;
-    } catch {
-      // Silently catch database/network errors to prevent locking out users
+    if (authError || !authData?.user) {
+      throw redirect({
+        to: "/auth",
+      });
     }
 
-    const appMetaRole = data.user.app_metadata?.["role"] ?? data.user.user_metadata?.["role"];
-
+    const user = authData.user;
     const isValidRole = (r: unknown): r is Role =>
       r === "admin" || r === "farmer" || r === "clerk";
 
-    const role: Role = isValidRole(profileRole)
-      ? profileRole
-      : isValidRole(appMetaRole)
-        ? appMetaRole
-        : "admin";
+    let resolvedRole: Role = "admin"; // Default fallback role
 
-    return { user: data.user, role };
+    // 2. Safely Attempt Profile Query
+    try {
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.warn("Non-fatal: Failed to load user profile role, using default:", profileError);
+      }
+
+      if (!profileError && profile?.role && isValidRole(profile.role)) {
+        resolvedRole = profile.role;
+      } else {
+        // Fallback to JWT metadata if table query returns null or error
+        const metaRole =
+          (user.app_metadata?.["role"] as string) ||
+          (user.user_metadata?.["role"] as string);
+
+        resolvedRole = isValidRole(metaRole) ? metaRole : "admin";
+      }
+    } catch (err) {
+      console.warn("Non-fatal: Failed to load user profile role, using default:", err);
+      const metaRole =
+        (user.app_metadata?.["role"] as string) ||
+        (user.user_metadata?.["role"] as string);
+
+      resolvedRole = isValidRole(metaRole) ? metaRole : "admin";
+    }
+
+    // 3. Return Authenticated Context
+    return {
+      user,
+      role: resolvedRole,
+    };
   },
->>>>>>> fee87a8 (Save remaining configuration changes)
   component: AuthenticatedLayout,
 });
-
-function RoleLoadError({ error, reset }: ErrorComponentProps) {
-  return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-milk px-5 text-center">
-      <h1 className="text-xl font-extrabold">Unable to load your account</h1>
-      <p className="max-w-md text-sm text-muted-foreground">{error.message}</p>
-      <button
-        type="button"
-        onClick={reset}
-        className="rounded-lg bg-maziwa-blue px-4 py-2 text-sm font-bold text-white"
-      >
-        Try again
-      </button>
-      <Link to="/auth" className="text-sm font-semibold text-maziwa-blue">
-        Return to sign in
-      </Link>
-    </main>
-  );
-}
 
 function AuthenticatedLayout() {
   return (
