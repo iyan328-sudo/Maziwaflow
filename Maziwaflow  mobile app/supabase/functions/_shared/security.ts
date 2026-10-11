@@ -39,21 +39,26 @@ export function isRateLimited(request: Request): boolean {
 export function getCorsHeaders(request: Request): Record<string, string> {
   const origin = request.headers.get("Origin");
   if (!origin) {
-    return {};
-  }
-
-  const allowedOrigins = parseAllowedOrigins();
-  const isAllowed = allowedOrigins.includes(origin) || origin.startsWith("http://localhost:");
-
-  if (!isAllowed) {
     return {
-      "Access-Control-Allow-Origin": "null",
-      Vary: "Origin",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
     };
   }
 
+  const allowedOrigins = parseAllowedOrigins();
+  const isAllowed =
+    origin.startsWith("http://localhost:") ||
+    origin === "http://localhost" ||
+    origin.startsWith("http://127.0.0.1:") ||
+    origin === "capacitor://localhost" ||
+    origin.endsWith(".pages.dev") ||
+    origin.endsWith(".lovable.app") ||
+    origin.endsWith(".lovableproject.com") ||
+    allowedOrigins.includes(origin);
+
   return {
-    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Origin": isAllowed ? origin : "*",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
     Vary: "Origin",

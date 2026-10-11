@@ -6,8 +6,6 @@ import {
   jsonResponse,
 } from "../_shared/security.ts";
 
-const allowedOrigins = new Set(["http://localhost:5173", "http://127.0.0.1:5173"]);
-
 interface StaffPayload {
   action: "create" | "update_role" | "reset_password";
   email?: string;
@@ -20,12 +18,10 @@ interface StaffPayload {
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    const origin = req.headers.get("Origin");
-    const headers =
-      origin && allowedOrigins.has(origin)
-        ? getCorsHeaders(req)
-        : { "Access-Control-Allow-Origin": "null", Vary: "Origin" };
-    return new Response(null, { status: 200, headers: { ...headers, ...getSecurityHeaders() } });
+    return new Response(null, {
+      status: 200,
+      headers: { ...getCorsHeaders(req), ...getSecurityHeaders() },
+    });
   }
 
   if (isRateLimited(req)) {

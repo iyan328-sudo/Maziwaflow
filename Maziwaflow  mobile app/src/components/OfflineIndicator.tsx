@@ -4,48 +4,45 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import {
-  getPendingCollections,
+  getTotalPendingCount,
   onQueueUpdate,
-  syncPendingCollections,
-  type PendingCollection,
+  syncAllPending,
 } from "@/lib/offline-queue";
 
 export function OfflineIndicator() {
   const online = useOnlineStatus();
-  const [pending, setPending] = useState<PendingCollection[]>(getPendingCollections());
+  const [pendingCount, setPendingCount] = useState<number>(getTotalPendingCount());
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
-    const update = () => setPending(getPendingCollections());
+    const update = () => setPendingCount(getTotalPendingCount());
     update();
     return onQueueUpdate(update);
   }, []);
 
-  const unsynced = pending.filter((p) => !p.synced);
-  const unsyncedCount = unsynced.length;
-
   useEffect(() => {
-    if (!online || unsyncedCount === 0) return;
+    if (!online || pendingCount === 0 || syncing) return;
     setSyncing(true);
-    syncPendingCollections((p) => ({
-      farmer_code: p.farmer_code,
-      quantity_kg: p.quantity_kg,
-      quality_grade: p.quality_grade,
-      status: p.status,
-      collected_at: p.collected_at,
-      received_by: p.received_by,
-    }))
-      .then((results) => {
-        const ok = results.filter((r) => r.success).length;
-        const fail = results.filter((r) => !r.success).length;
-        if (ok > 0) toast.success(`Synced ${ok} pending collection${ok > 1 ? "s" : ""}`);
-        if (fail > 0) toast.error(`${fail} collection${fail > 1 ? "s" : ""} failed to sync`);
-        setPending(getPendingCollections());
+    syncAllPending()
+      .then((summary) => {
+        const totalOk = summary.farmersSynced + summary.collectionsSynced;
+        const totalFail = summary.farmersFailed + summary.collectionsFailed;
+        if (totalOk > 0) {
+          toast.success(
+            `Synced ${totalOk} offline record${totalOk > 1 ? "s" : ""}${
+              summary.farmersSynced > 0 ? ` (${summary.farmersSynced} members, ${summary.collectionsSynced} collections)` : ""
+            }`,
+          );
+        }
+        if (totalFail > 0) {
+          toast.error(`${totalFail} record${totalFail > 1 ? "s" : ""} failed to sync`);
+        }
+        setPendingCount(getTotalPendingCount());
       })
       .finally(() => setSyncing(false));
-  }, [online, unsyncedCount]);
+  }, [online, pendingCount]);
 
-  if (online && unsyncedCount === 0 && !syncing) return null;
+  if (online && pendingCount === 0 && !syncing) return null;
 
   return (
     <div
@@ -58,45 +55,48 @@ export function OfflineIndicator() {
     >
       {!online && <WifiOff className="size-4" />}
       {syncing && <Loader2 className="size-4 animate-spin" />}
-      {online && !syncing && unsynced.length === 0 && <CheckCircle2 className="size-4" />}
-      {!online && <span>Offline — {unsynced.length} pending</span>}
-      {online && syncing && <span>Syncing {unsynced.length}…</span>}
-      {online && !syncing && unsynced.length === 0 && <span>All synced</span>}
+      {online && !syncing && pendingCount === 0 && <CheckCircle2 className="size-4" />}
+      {!online && <span>Offline — {pendingCount} pending</span>}
+      {online && syncing && <span>Syncing {pendingCount} records…</span>}
+      {online && !syncing && pendingCount === 0 && <span>All synced</span>}
     </div>
   );
 }
 
 export function ManualSyncButton() {
   const online = useOnlineStatus();
-  const [pending, setPending] = useState<PendingCollection[]>(getPendingCollections());
+  const [pendingCount, setPendingCount] = useState<number>(getTotalPendingCount());
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
-    const update = () => setPending(getPendingCollections());
+    const update = () => setPendingCount(getTotalPendingCount());
     update();
     return onQueueUpdate(update);
   }, []);
 
-  const unsynced = pending.filter((p) => !p.synced);
-  if (unsynced.length === 0) return null;
+  if (pendingCount === 0) return null;
 
   const handleSync = async () => {
     if (!online) return void toast.error("You're offline — can't sync right now");
     setSyncing(true);
-    const results = await syncPendingCollections((p) => ({
-      farmer_code: p.farmer_code,
-      quantity_kg: p.quantity_kg,
-      quality_grade: p.quality_grade,
-      status: p.status,
-      collected_at: p.collected_at,
-      received_by: p.received_by,
-    }));
-    const ok = results.filter((r) => r.success).length;
-    const fail = results.filter((r) => !r.success).length;
-    if (ok > 0) toast.success(`Synced ${ok} pending collection${ok > 1 ? "s" : ""}`);
-    if (fail > 0) toast.error(`${fail} collection${fail > 1 ? "s" : ""} failed to sync`);
-    setPending(getPendingCollections());
-    setSyncing(false);
+    try {
+      const summary = await syncAllPending();
+      const totalOk = summary.farmersSynced + summary.collectionsSynced;
+      const totalFail = summary.farmersFailed + summary.collectionsFailed;
+      if (totalOk > 0) {
+        toast.success(
+          `Synced ${totalOk} record${totalOk > 1 ? "s" : ""}${
+            summary.farmersSynced > 0 ? ` (${summary.farmersSynced} members, ${summary.collectionsSynced} collections)` : ""
+          }`,
+        );
+      }
+      if (totalFail > 0) {
+        toast.error(`${totalFail} record${totalFail > 1 ? "s" : ""} failed to sync`);
+      }
+    } finally {
+      setPendingCount(getTotalPendingCount());
+      setSyncing(false);
+    }
   };
 
   return (
@@ -106,7 +106,7 @@ export function ManualSyncButton() {
       className="flex items-center gap-1.5 rounded-full bg-maziwa-orange px-3 py-1.5 text-xs font-bold text-primary-foreground transition hover:bg-maziwa-orange-deep disabled:opacity-50"
     >
       <RefreshCw className={cn("size-3.5", syncing && "animate-spin")} />
-      {syncing ? "Syncing…" : `${unsynced.length} pending`}
+      {syncing ? "Syncing…" : `${pendingCount} pending`}
     </button>
   );
 }

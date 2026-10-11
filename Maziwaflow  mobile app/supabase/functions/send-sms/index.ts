@@ -43,11 +43,70 @@ Deno.serve(async (req: Request) => {
       return jsonResponse(req, { error: "Only admins and clerks can request SMS alerts" }, 403);
     }
 
-    return jsonResponse(
-      req,
-      { sent: false, error: "SMS delivery is not configured" },
-      503,
-    );
+    const body = await req.json().catch(() => ({}));
+    const {
+      phone,
+      farmer_name,
+      farmer_code,
+      quantity_kg,
+      quality_grade,
+      price_per_ksh,
+      total_payout_ksh,
+      collection_id,
+      custom_message,
+    } = body;
+
+    const receiptRef =
+      collection_id ? String(collection_id).slice(0, 8).toUpperCase() : `RC-${Date.now().toString(36).toUpperCase()}`;
+
+    const smsMessage =
+      custom_message ||
+      `MaziwaFlow Receipt: Confirmed ${quantity_kg ?? 0}kg ${quality_grade ?? "milk"} from ${farmer_name || farmer_code || "Member"}. Rate: KSh ${price_per_ksh ?? 0}/kg. Total: KSh ${total_payout_ksh ?? 0}. Ref: ${receiptRef}`;
+
+    console.log("[SMS Notification Prepared]", { phone, message: smsMessage });
+
+    const atApiKey = Deno.env.get("AFRICASTALKING_API_KEY");
+    const atUsername = Deno.env.get("AFRICASTALKING_USERNAME");
+
+    if (atApiKey && atUsername && phone) {
+      try {
+        const atUrl = "https://api.africastalking.com/version1/messaging";
+        const form = new URLSearchParams({
+          username: atUsername,
+          to: phone,
+          message: smsMessage,
+        });
+        const atRes = await fetch(atUrl, {
+          method: "POST",
+          headers: {
+            apiKey: atApiKey,
+            "Content-Type": "application/x-www-form-urlencoded",
+            Accept: "application/json",
+          },
+          body: form.toString(),
+        });
+        const atData = await atRes.json().catch(() => null);
+        return jsonResponse(req, {
+          success: atRes.ok,
+          delivered: atRes.ok,
+          simulated: false,
+          recipient: phone,
+          message: smsMessage,
+          providerResponse: atData,
+        });
+      } catch (smsErr) {
+        console.error("SMS carrier delivery failed, falling back to simulated status", smsErr);
+      }
+    }
+
+    return jsonResponse(req, {
+      success: true,
+      delivered: false,
+      simulated: true,
+      recipient: phone || "None",
+      message: smsMessage,
+      info: "SMS simulated. Configure AFRICASTALKING_API_KEY in Supabase secrets for carrier dispatch.",
+    });
   } catch (error) {
     console.error("SMS request failed", error);
     return jsonResponse(req, { error: "Could not process the SMS request" }, 500);

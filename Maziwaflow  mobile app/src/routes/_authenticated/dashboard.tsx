@@ -15,12 +15,15 @@ import {
   Wallet,
   CalendarDays,
   ShieldCheck,
+  Coins,
+  CheckCircle2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, ShellCard } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { useRole, type Role } from "@/components/RoleViewContext";
+import { getClerkCommissionRate } from "./milk-prices";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -173,6 +176,134 @@ const ROLE_ACTIONS: Record<Role, string[]> = {
 
 const ROLE_LABELS: Record<Role, string> = { clerk: "Clerk", farmer: "Farmer", admin: "Admin" };
 
+function ClerkEarningsSection({ clerkId }: { clerkId: string }) {
+  const [rate, setRate] = useState<number>(getClerkCommissionRate());
+  const [stats, setStats] = useState<{
+    totalKg: number;
+    todayKg: number;
+    weekKg: number;
+    monthKg: number;
+    loading: boolean;
+  }>({
+    totalKg: 0,
+    todayKg: 0,
+    weekKg: 0,
+    monthKg: 0,
+    loading: true,
+  });
+
+  useEffect(() => {
+    function updateRate() {
+      setRate(getClerkCommissionRate());
+    }
+    window.addEventListener("maziwa-commission-rate-updated", updateRate);
+    return () => window.removeEventListener("maziwa-commission-rate-updated", updateRate);
+  }, []);
+
+  useEffect(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    weekAgo.setHours(0, 0, 0, 0);
+
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    supabase
+      .from("collections")
+      .select("quantity_kg, status, collected_at")
+      .eq("received_by", clerkId)
+      .neq("status", "Rejected")
+      .then(({ data }) => {
+        const rows = data ?? [];
+        let total = 0;
+        let todayVal = 0;
+        let weekVal = 0;
+        let monthVal = 0;
+
+        rows.forEach((r) => {
+          const qty = Number(r.quantity_kg) || 0;
+          total += qty;
+          const dt = new Date(r.collected_at);
+          if (dt >= today) todayVal += qty;
+          if (dt >= weekAgo) weekVal += qty;
+          if (dt >= monthStart) monthVal += qty;
+        });
+
+        setStats({
+          totalKg: total,
+          todayKg: todayVal,
+          weekKg: weekVal,
+          monthKg: monthVal,
+          loading: false,
+        });
+      });
+  }, [clerkId]);
+
+  const totalEarnings = stats.totalKg * rate;
+  const todayEarnings = stats.todayKg * rate;
+  const weekEarnings = stats.weekKg * rate;
+  const monthEarnings = stats.monthKg * rate;
+
+  return (
+    <ShellCard className="mb-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Coins className="size-5 text-maziwa-green-deep" />
+          <h2 className="font-bold text-base">My Earnings</h2>
+        </div>
+        <span className="rounded-full bg-maziwa-green/15 px-2.5 py-0.5 text-xs font-bold text-maziwa-green-deep">
+          KSh {rate.toFixed(2)}/L flat rate
+        </span>
+      </div>
+
+      <div className="rounded-lg bg-muted/40 p-3.5 ring-1 ring-border/60">
+        <div className="flex items-baseline justify-between">
+          <div>
+            <p className="text-xs font-bold text-muted-foreground uppercase">Total Accrued</p>
+            <p className="mt-0.5 text-2xl font-extrabold text-foreground">
+              KSh {totalEarnings.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+          </div>
+          <div className="text-right">
+            <span className="inline-flex items-center gap-1 rounded-full bg-maziwa-blue/15 px-2 py-0.5 text-xs font-semibold text-maziwa-blue">
+              <CheckCircle2 className="size-3" /> Active / Accruing
+            </span>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              From {stats.totalKg.toFixed(1)} L collected
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-3.5 grid grid-cols-3 gap-2 border-t border-border/60 pt-3 text-center">
+          <div className="rounded-md bg-card/80 p-2 ring-1 ring-border/40">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase">Today</p>
+            <p className="mt-0.5 font-extrabold text-xs text-foreground">
+              KSh {todayEarnings.toFixed(0)}
+            </p>
+            <p className="text-[10px] text-muted-foreground">{stats.todayKg.toFixed(1)} L</p>
+          </div>
+          <div className="rounded-md bg-card/80 p-2 ring-1 ring-border/40">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase">7 Days</p>
+            <p className="mt-0.5 font-extrabold text-xs text-foreground">
+              KSh {weekEarnings.toFixed(0)}
+            </p>
+            <p className="text-[10px] text-muted-foreground">{stats.weekKg.toFixed(1)} L</p>
+          </div>
+          <div className="rounded-md bg-card/80 p-2 ring-1 ring-border/40">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase">This Month</p>
+            <p className="mt-0.5 font-extrabold text-xs text-foreground">
+              KSh {monthEarnings.toFixed(0)}
+            </p>
+            <p className="text-[10px] text-muted-foreground">{stats.monthKg.toFixed(1)} L</p>
+          </div>
+        </div>
+      </div>
+    </ShellCard>
+  );
+}
+
 function Dashboard() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -213,6 +344,9 @@ function Dashboard() {
           {ROLE_LABELS[role]}
         </span>
       </div>
+
+      {role === "clerk" && <ClerkEarningsSection clerkId={user.id} />}
+
       <ShellCard>
         <div className="mb-5">
           <p className="text-xs font-bold text-muted-foreground uppercase">

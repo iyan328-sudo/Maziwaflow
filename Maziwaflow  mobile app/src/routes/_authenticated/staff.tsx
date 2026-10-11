@@ -101,19 +101,45 @@ function Staff() {
   const clerkCount = (rows ?? []).filter((r) => r.role === "clerk").length;
 
   async function callStaffApi(body: Record<string, unknown>) {
-    const { data: session } = await supabase.auth.getSession();
-    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-staff`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.session?.access_token ?? ""}`,
-      },
-      body: JSON.stringify(body),
-    });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
-    return json;
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-staff", { body });
+      if (error) {
+        let errMsg = error.message;
+        // Check if error response contained a structured JSON message
+        if ("context" in error && error.context && typeof (error.context as Response).json === "function") {
+          const errJson = await (error.context as Response).json().catch(() => null);
+          if (errJson?.error) errMsg = errJson.error;
+        }
+        throw new Error(errMsg || "Failed to communicate with staff management service");
+      }
+      return data;
+    } catch (invokeErr) {
+      // Direct fetch fallback with apikey and Bearer token
+      const { data: session } = await supabase.auth.getSession();
+      const token = session.session?.access_token ?? "";
+      const apiKey =
+        import.meta.env.VITE_SUPABASE_ANON_KEY ||
+        import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+        "";
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-staff`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          apikey: apiKey,
+        },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          json.error ??
+            (invokeErr instanceof Error ? invokeErr.message : `Request failed (${res.status})`),
+        );
+      }
+      return json;
+    }
   }
 
   async function submitCreate(e: React.FormEvent) {
