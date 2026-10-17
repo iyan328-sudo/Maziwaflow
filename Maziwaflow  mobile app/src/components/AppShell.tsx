@@ -26,6 +26,7 @@ import {
   MapPin,
   Settings,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -58,6 +59,7 @@ import {
   getTotalPendingCount,
   syncAllPending,
   onQueueUpdate,
+  clearAllPendingRecords,
 } from "@/lib/offline-queue";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -270,16 +272,29 @@ export function AppShell({
                 {pendingCount} offline {pendingCount === 1 ? "entry" : "entries"}
               </span>
             </div>
-            {online && (
-              <Button
-                size="sm"
-                onClick={handleDesktopSync}
-                disabled={syncing}
-                className="h-6 rounded-md bg-amber-500 hover:bg-amber-600 text-[10px] font-bold px-2 text-slate-950 shrink-0"
+            <div className="flex items-center gap-1 shrink-0">
+              {online && (
+                <Button
+                  size="sm"
+                  onClick={handleDesktopSync}
+                  disabled={syncing}
+                  className="h-6 rounded-md bg-amber-500 hover:bg-amber-600 text-[10px] font-bold px-2 text-slate-950"
+                >
+                  {syncing ? <RotateCw className="size-3 animate-spin" /> : "Sync"}
+                </Button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  clearAllPendingRecords();
+                  toast.info("Offline sync queue cleared.");
+                }}
+                title="Clear offline queue"
+                className="size-6 rounded-md bg-white/10 hover:bg-white/20 text-slate-300 flex items-center justify-center transition"
               >
-                {syncing ? <RotateCw className="size-3 animate-spin" /> : "Sync"}
-              </Button>
-            )}
+                <Trash2 className="size-3" />
+              </button>
+            </div>
           </div>
         )}
       </div>

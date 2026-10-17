@@ -54,6 +54,13 @@ function AuthPage() {
   });
 
   useEffect(() => {
+    // If user already has an active session, forward to dashboard
+    supabase.auth.getSession().then(({ data }) => {
+      if (data?.session?.user) {
+        navigate({ to: "/dashboard", replace: true });
+      }
+    });
+
     const isEmailConfirmation = new URLSearchParams(window.location.search).get("verified") === "1";
     if (!isEmailConfirmation) return;
 

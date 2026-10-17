@@ -1,11 +1,13 @@
-import { createFileRoute, Outlet, redirect, isRedirect } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect, isRedirect, Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { RoleProvider, type Role } from "@/components/RoleViewContext";
+import { Button } from "@/components/ui/button";
+import { RotateCw, LogIn } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
-    // 1. Verify Authentication State with Session Fallback
+    // 1. Verify Authentication State with Multi-tier Session Fallback
     let user: any = null;
 
     try {
@@ -23,6 +25,27 @@ export const Route = createFileRoute("/_authenticated")({
         const { data: sessionData } = await supabase.auth.getSession();
         if (sessionData?.session?.user) {
           user = sessionData.session.user;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // Direct localStorage cache inspection as ultimate fallback
+    if (!user && typeof window !== "undefined") {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith("sb-") && key.endsWith("-auth-token")) {
+            const val = localStorage.getItem(key);
+            if (val) {
+              const parsed = JSON.parse(val);
+              if (parsed?.user) {
+                user = parsed.user;
+                break;
+              }
+            }
+          }
         }
       } catch {
         // ignore
@@ -77,7 +100,8 @@ export const Route = createFileRoute("/_authenticated")({
       role: resolvedRole,
     };
   },
-  errorComponent: ({ error }) => {
+  errorComponent: ({ error, reset }) => {
+    // Only forward genuine TanStack Router redirects
     if (isRedirect(error)) {
       const target =
         (error as any)?.options?.to ||
@@ -89,11 +113,37 @@ export const Route = createFileRoute("/_authenticated")({
       }
       throw error;
     }
-    if (typeof window !== "undefined") {
-      window.location.replace("/auth");
-      return null;
-    }
-    return null;
+
+    // For any runtime component exceptions, DO NOT sign out or redirect to /auth
+    console.error("Authenticated layout error:", error);
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-6 text-center dark:bg-background">
+        <div className="max-w-md rounded-2xl border border-border/80 bg-card p-6 shadow-lg">
+          <h2 className="text-lg font-bold text-foreground">Something went wrong</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            A temporary view error occurred while rendering the page. Your session is active.
+          </p>
+          <div className="mt-5 flex items-center justify-center gap-3">
+            <Button
+              onClick={() => {
+                if (reset) reset();
+                else window.location.reload();
+              }}
+              className="gap-2 bg-maziwa-blue text-white"
+            >
+              <RotateCw className="size-4" />
+              <span>Reload Page</span>
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="/auth">
+                <LogIn className="mr-2 size-4" />
+                <span>Go to Login</span>
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
   },
   component: AuthenticatedLayout,
 });

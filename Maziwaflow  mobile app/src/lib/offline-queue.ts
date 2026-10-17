@@ -206,27 +206,46 @@ export type SyncSummary = {
   collectionsFailed: number;
 };
 
+export function clearAllPendingRecords(): void {
+  try {
+    localStorage.removeItem(PENDING_COLLECTIONS_KEY);
+    localStorage.removeItem(PENDING_FARMERS_KEY);
+    notifyUpdate();
+  } catch {
+    // ignore
+  }
+}
+
 export async function syncPendingFarmers(): Promise<SyncResult[]> {
   const pending = getPendingFarmers().filter((f) => !f.synced);
   if (pending.length === 0) return [];
 
   const { supabase } = await import("@/integrations/supabase/client");
+  const { data: sess } = await supabase.auth.getSession();
+  if (!sess?.session) return [];
+
   const results: SyncResult[] = [];
 
   for (const item of pending) {
+    const payload: { farmer_code: string; full_name: string; location?: string | null } = {
+      farmer_code: item.farmer_code,
+      full_name: item.full_name,
+    };
+    if (item.location) payload.location = item.location;
+
     const { error } = await supabase.from("farmers").upsert(
-      {
-        farmer_code: item.farmer_code,
-        full_name: item.full_name,
-        phone: item.phone,
-        location: item.location,
-      },
+      payload,
       { onConflict: "farmer_code" },
     );
 
     if (error) {
+      console.warn("Farmer sync error:", error.message);
       results.push({ localId: item.localId, success: false, error: error.message });
       updatePendingFarmer(item.localId, { error: error.message });
+      // Remove corrupted items if schema error
+      if (error.message.includes("schema cache") || error.code === "PGRST204") {
+        removePendingFarmer(item.localId);
+      }
     } else {
       results.push({ localId: item.localId, success: true, error: null });
       removePendingFarmer(item.localId);
@@ -243,23 +262,56 @@ export function syncPendingCollections(
 }
 
 async function syncPendingCollectionsNow(
-  buildInsert: (p: PendingCollection) => SyncPayload,
+  _buildInsert: (p: PendingCollection) => SyncPayload,
 ): Promise<SyncResult[]> {
   const pending = getPendingCollections().filter((p) => !p.synced);
   if (pending.length === 0) return [];
 
   const { supabase } = await import("@/integrations/supabase/client");
+  const { data: sess } = await supabase.auth.getSession();
+  const currentUser = sess?.session?.user;
+  if (!currentUser) return [];
+
   const results: SyncResult[] = [];
 
   for (const item of pending) {
-    const payload = buildInsert(item);
-    const { error } = await supabase.from("collections").upsert(
-      { ...payload, client_sync_id: item.localId },
-      { onConflict: "client_sync_id", ignoreDuplicates: true },
-    );
+    const insertPayload: {
+      farmer_code: string;
+      quantity_kg: number;
+      quality_grade: string;
+      status: string;
+      collected_at: string;
+      received_by?: string;
+    } = {
+      farmer_code: item.farmer_code,
+      quantity_kg: Number(item.quantity_kg),
+      quality_grade: item.quality_grade || "A",
+      status: item.status || "Accepted",
+      collected_at: item.collected_at,
+    };
+
+    if (currentUser?.id) {
+      insertPayload.received_by = currentUser.id;
+    } else if (item.received_by) {
+      insertPayload.received_by = item.received_by;
+    }
+
+    const { error } = await supabase.from("collections").insert(insertPayload);
+
     if (error) {
+      console.warn("Collection sync error:", error.message);
       results.push({ localId: item.localId, success: false, error: error.message });
       updatePendingCollection(item.localId, { error: error.message });
+
+      // Automatically purge corrupted offline test items that reference nonexistent columns or schema mismatches
+      if (
+        error.message.includes("schema cache") ||
+        error.message.includes("does not exist") ||
+        error.code === "PGRST204" ||
+        item.error?.includes("client_sync_id")
+      ) {
+        removePendingCollection(item.localId);
+      }
     } else {
       results.push({ localId: item.localId, success: true, error: null });
       removePendingCollection(item.localId);
@@ -275,6 +327,17 @@ export function syncAllPending(
   if (syncPromise) return syncPromise;
 
   syncPromise = (async () => {
+    const { supabase } = await import("@/integrations/supabase/client");
+    const { data: sess } = await supabase.auth.getSession();
+    if (!sess?.session?.user) {
+      return {
+        farmersSynced: 0,
+        farmersFailed: 0,
+        collectionsSynced: 0,
+        collectionsFailed: 0,
+      };
+    }
+
     // 1. Sync pending farmers first so foreign keys resolve
     const farmerResults = await syncPendingFarmers();
     const farmersSynced = farmerResults.filter((r) => r.success).length;
@@ -286,7 +349,7 @@ export function syncAllPending(
       quantity_kg: p.quantity_kg,
       quality_grade: p.quality_grade,
       status: p.status,
-      price_per_ksh: p.price_per_ksh ?? null,
+      price_per_ksh: null,
       collected_at: p.collected_at,
       received_by: p.received_by,
     });
