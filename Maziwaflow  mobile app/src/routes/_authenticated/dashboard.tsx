@@ -307,18 +307,30 @@ function ClerkEarningsSection({ clerkId }: { clerkId: string }) {
 function Dashboard() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user } = Route.useRouteContext();
-  const role = useRole();
+  const context = Route.useRouteContext();
+  const user = context?.user;
+  const rawRole = useRole();
+  const role: Role =
+    rawRole === "clerk" || rawRole === "farmer" || rawRole === "admin"
+      ? rawRole
+      : "admin";
   const [name, setName] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!user?.id) return;
     supabase
       .from("profiles")
       .select("full_name")
       .eq("id", user.id)
       .maybeSingle()
-      .then(({ data }) => setName(data?.full_name ?? null));
-  }, [user.id]);
+      .then(({ data }) => {
+        if (data?.full_name) setName(data.full_name);
+        else if (user.email) setName(user.email.split("@")[0]);
+      })
+      .catch(() => {
+        if (user.email) setName(user.email.split("@")[0]);
+      });
+  }, [user?.id, user?.email]);
 
   async function logout() {
     await queryClient.cancelQueries();
@@ -327,7 +339,9 @@ function Dashboard() {
     navigate({ to: "/auth", replace: true });
   }
 
-  const visibleActions = ALL_ACTIONS.filter((a) => ROLE_ACTIONS[role].includes(a.label));
+  const roleActions = ROLE_ACTIONS[role] ?? ROLE_ACTIONS.admin;
+  const visibleActions = ALL_ACTIONS.filter((a) => roleActions.includes(a.label));
+  const roleLabel = ROLE_LABELS[role] ?? "Administrator";
 
   return (
     <AppShell
@@ -338,19 +352,19 @@ function Dashboard() {
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <p className="text-xs font-bold text-muted-foreground uppercase">Signed in as</p>
-          <p className="text-sm font-semibold text-foreground">{ROLE_LABELS[role]}</p>
+          <p className="text-sm font-semibold text-foreground">{roleLabel}</p>
         </div>
         <span className="rounded-full bg-maziwa-blue/10 px-3 py-1 text-xs font-bold text-maziwa-blue">
-          {ROLE_LABELS[role]}
+          {roleLabel}
         </span>
       </div>
 
-      {role === "clerk" && <ClerkEarningsSection clerkId={user.id} />}
+      {role === "clerk" && user?.id && <ClerkEarningsSection clerkId={user.id} />}
 
       <ShellCard>
         <div className="mb-5">
           <p className="text-xs font-bold text-muted-foreground uppercase">
-            {ROLE_LABELS[role]} menu
+            {roleLabel} menu
           </p>
         </div>
         <nav className="flex flex-col gap-3.5" aria-label="Main menu">

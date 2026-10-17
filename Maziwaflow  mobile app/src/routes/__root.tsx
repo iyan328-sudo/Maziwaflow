@@ -6,6 +6,8 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  isRedirect,
+  isNotFound,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import type { ErrorComponentProps } from "@tanstack/react-router";
@@ -39,31 +41,73 @@ function NotFoundComponent() {
 }
 
 function ErrorComponent({ error, reset }: ErrorComponentProps) {
+  if (isRedirect(error)) {
+    const target =
+      (error as any)?.options?.to ||
+      (error as any)?.headers?.get?.("Location") ||
+      "/auth";
+    if (typeof window !== "undefined") {
+      window.location.replace(target);
+      return null;
+    }
+    throw error;
+  }
+
+  if (isNotFound(error)) {
+    throw error;
+  }
+
   console.error(error);
   const router = useRouter();
   useEffect(() => {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
 
+  const errorMessage = error instanceof Error ? error.message : String(error ?? "");
+  const isAuthIssue =
+    errorMessage.toLowerCase().includes("auth") ||
+    errorMessage.toLowerCase().includes("session") ||
+    errorMessage.toLowerCase().includes("user") ||
+    errorMessage.toLowerCase().includes("token") ||
+    errorMessage.toLowerCase().includes("unauthorized");
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
+        <h1 className="text-xl font-bold tracking-tight text-foreground">
+          {isAuthIssue ? "Sign-in required" : "This page didn't load"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
+          {isAuthIssue
+            ? "Your session is not active or has expired. Please sign in to continue."
+            : "Something went wrong on our end. You can try refreshing or head back home."}
         </p>
+
+        {errorMessage && !isAuthIssue ? (
+          <p className="mt-2 text-xs font-mono text-muted-foreground/80 bg-muted/50 p-2 rounded border border-border/40 truncate">
+            {errorMessage}
+          </p>
+        ) : null}
+
         <div className="mt-6 flex flex-wrap justify-center gap-2">
-          <button
-            onClick={() => {
-              router.invalidate();
-              reset();
-            }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Try again
-          </button>
+          {isAuthIssue ? (
+            <a
+              href="/auth"
+              className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              Sign In
+            </a>
+          ) : (
+            <button
+              onClick={() => {
+                router.invalidate();
+                reset();
+              }}
+              className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              Try again
+            </button>
+          )}
           <a
             href="/"
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"

@@ -218,8 +218,10 @@ export function AppShell({
     navigate({ to: "/auth" });
   }
 
-  const roleInfo = ROLE_BADGE_STYLES[role] || ROLE_BADGE_STYLES.admin;
-  const visibleNavItems = NAV_ITEMS.filter((item) => item.roles.includes(role));
+  const safeRole: Role =
+    role === "clerk" || role === "farmer" || role === "admin" ? role : "admin";
+  const roleInfo = ROLE_BADGE_STYLES[safeRole] || ROLE_BADGE_STYLES.admin;
+  const visibleNavItems = NAV_ITEMS.filter((item) => item.roles.includes(safeRole));
 
   return (
     <div className="min-h-dvh bg-slate-50/60 dark:bg-background text-foreground antialiased flex flex-col lg:flex-row">

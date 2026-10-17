@@ -1,20 +1,40 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect, isRedirect } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { RoleProvider, type Role } from "@/components/RoleViewContext";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
-    // 1. Verify Authentication State
-    const { data: authData, error: authError } = await supabase.auth.getUser();
+    // 1. Verify Authentication State with Session Fallback
+    let user: any = null;
 
-    if (authError || !authData?.user) {
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (!authError && authData?.user) {
+        user = authData.user;
+      }
+    } catch {
+      // ignore
+    }
+
+    // Check cached session if network or auth error occurred
+    if (!user) {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.session?.user) {
+          user = sessionData.session.user;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!user) {
       throw redirect({
         to: "/auth",
       });
     }
 
-    const user = authData.user;
     const isValidRole = (r: unknown): r is Role =>
       r === "admin" || r === "farmer" || r === "clerk";
 
@@ -57,12 +77,37 @@ export const Route = createFileRoute("/_authenticated")({
       role: resolvedRole,
     };
   },
+  errorComponent: ({ error }) => {
+    if (isRedirect(error)) {
+      const target =
+        (error as any)?.options?.to ||
+        (error as any)?.headers?.get?.("Location") ||
+        "/auth";
+      if (typeof window !== "undefined") {
+        window.location.replace(target);
+        return null;
+      }
+      throw error;
+    }
+    if (typeof window !== "undefined") {
+      window.location.replace("/auth");
+      return null;
+    }
+    return null;
+  },
   component: AuthenticatedLayout,
 });
 
 function AuthenticatedLayout() {
+  const context = Route.useRouteContext();
+  const rawRole = context?.role;
+  const role: Role =
+    rawRole === "clerk" || rawRole === "farmer" || rawRole === "admin"
+      ? rawRole
+      : "admin";
+
   return (
-    <RoleProvider role={Route.useRouteContext().role}>
+    <RoleProvider role={role}>
       <Outlet />
     </RoleProvider>
   );
