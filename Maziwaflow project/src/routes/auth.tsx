@@ -2,7 +2,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Droplets, Loader2 } from "lucide-react";
+import { Droplets, Loader2, User, Users } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { fieldClass, labelClass } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -12,9 +13,9 @@ export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
       { title: "Sign In — Maziwaflow Mobile" },
-      { name: "description", content: "Sign in or create a farmer account for Maziwaflow." },
+      { name: "description", content: "Sign in to Maziwaflow — Clerk, Farmer, or Admin." },
       { property: "og:title", content: "Sign In — Maziwaflow Mobile" },
-      { property: "og:description", content: "Sign in or create a farmer account for Maziwaflow." },
+      { property: "og:description", content: "Sign in to Maziwaflow — Clerk, Farmer, or Admin." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -22,22 +23,34 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
+type SignupRole = "clerk" | "farmer";
+
+const ROLE_INFO: { id: SignupRole; label: string; desc: string; icon: LucideIcon }[] = [
+  { id: "clerk", label: "Clerk", desc: "Record milk collections", icon: User },
+  { id: "farmer", label: "Farmer", desc: "Track your deliveries", icon: Users },
+];
+
 const signInSchema = z.object({
   email: z.string().trim().email("Enter a valid email").max(255),
   password: z.string().min(8, "Password must be at least 8 characters").max(72),
 });
 const signUpSchema = signInSchema.extend({
   full_name: z.string().trim().min(2, "Enter your full name").max(100),
+  collection_centre: z.string().trim().max(100).optional().or(z.literal("")),
+  phone: z.string().trim().max(20).optional().or(z.literal("")),
 });
 
 function AuthPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [selectedRole, setSelectedRole] = useState<SignupRole>("clerk");
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
     email: "",
     password: "",
     full_name: "",
+    collection_centre: "",
+    phone: "",
   });
 
   useEffect(() => {
@@ -67,8 +80,16 @@ function AuthPage() {
       if (mode === "signin") {
         const p = signInSchema.safeParse(form);
         if (!p.success) return void toast.error(p.error.issues[0]?.message ?? "Invalid input");
-        const { error } = await supabase.auth.signInWithPassword(p.data);
+        const { data, error } = await supabase.auth.signInWithPassword(p.data);
         if (error) return void toast.error(error.message);
+
+        // Ensure session cache is warm and redirect to operational dashboard
+        try {
+          await supabase.auth.getSession();
+        } catch {
+          // ignore
+        }
+        toast.success("Welcome back to MaziwaFlow!");
         navigate({ to: "/dashboard" });
       } else {
         const p = signUpSchema.safeParse(form);
@@ -83,6 +104,8 @@ function AuthPage() {
             ).toString(),
             data: {
               full_name: p.data.full_name,
+              collection_centre: p.data.collection_centre || undefined,
+              role: selectedRole,
             },
           },
         });
@@ -117,6 +140,42 @@ function AuthPage() {
             {mode === "signin" ? "Sign In" : "Create Account"}
           </h2>
 
+          {mode === "signin" ? (
+            <p className="text-center text-sm text-muted-foreground">
+              Your account role is loaded automatically after sign in.
+            </p>
+          ) : (
+            <div>
+              <span className={labelClass}>Select account type</span>
+              <div className="grid grid-cols-2 gap-2">
+                {ROLE_INFO.map((r) => {
+                  const Icon = r.icon;
+                  const active = selectedRole === r.id;
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => setSelectedRole(r.id)}
+                      className={`flex flex-col items-center gap-1.5 rounded-lg p-3 text-center transition ring-1 ${
+                        active
+                          ? "bg-maziwa-blue text-primary-foreground ring-maziwa-blue shadow-md"
+                          : "bg-background text-foreground ring-border hover:ring-maziwa-blue/50"
+                      }`}
+                    >
+                      <Icon className="size-5" />
+                      <span className="text-xs font-bold">{r.label}</span>
+                      <span
+                        className={`text-[10px] leading-tight ${active ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                      >
+                        {r.desc}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <form onSubmit={submit} className="space-y-4">
             {mode === "signup" && (
               <>
@@ -132,10 +191,34 @@ function AuthPage() {
                     placeholder="e.g. Grace Chepkemoi"
                   />
                 </div>
-                <p className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
-                  New accounts are registered as farmers. Staff accounts must be created by an
-                  admin.
-                </p>
+                {selectedRole !== "farmer" && (
+                  <div>
+                    <label className={labelClass} htmlFor="centre">
+                      Collection Centre
+                    </label>
+                    <input
+                      id="centre"
+                      className={fieldClass}
+                      value={form.collection_centre}
+                      onChange={set("collection_centre")}
+                      placeholder="e.g. Kapsabet Cooler"
+                    />
+                  </div>
+                )}
+                {selectedRole === "farmer" && (
+                  <div>
+                    <label className={labelClass} htmlFor="phone">
+                      Phone Number
+                    </label>
+                    <input
+                      id="phone"
+                      className={fieldClass}
+                      value={form.phone}
+                      onChange={set("phone")}
+                      placeholder="e.g. +254712345678"
+                    />
+                  </div>
+                )}
               </>
             )}
             <div>

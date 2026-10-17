@@ -80,20 +80,17 @@ function AuthPage() {
       if (mode === "signin") {
         const p = signInSchema.safeParse(form);
         if (!p.success) return void toast.error(p.error.issues[0]?.message ?? "Invalid input");
-const { data, error } = await supabase.auth.signInWithPassword(p.data);
-if (error) return void toast.error(error.message);
+        const { data, error } = await supabase.auth.signInWithPassword(p.data);
+        if (error) return void toast.error(error.message);
 
-// Force refresh session and safely access the role property
-const { data: sessionData } = await supabase.auth.refreshSession();
-const user = sessionData?.user || data.user;
-const role = user?.app_metadata?.["role"];
-
-// Redirect based on role
-if (role === "admin") {
-  navigate({ to: "/admin-dashboard" });
-} else {
-  navigate({ to: "/dashboard" });
-}
+        // Ensure session cache is warm and redirect to operational dashboard
+        try {
+          await supabase.auth.getSession();
+        } catch {
+          // ignore
+        }
+        toast.success("Welcome back to MaziwaFlow!");
+        navigate({ to: "/dashboard" });
       } else {
         const p = signUpSchema.safeParse(form);
         if (!p.success) return void toast.error(p.error.issues[0]?.message ?? "Invalid input");
