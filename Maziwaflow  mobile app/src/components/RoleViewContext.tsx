@@ -13,3 +13,7 @@ export function useRole(): Role {
   if (role === null) throw new Error("useRole must be used within RoleProvider");
   return role;
 }
+
+export function useOptionalRole(): Role | null {
+  return useContext(RoleContext);
+}
