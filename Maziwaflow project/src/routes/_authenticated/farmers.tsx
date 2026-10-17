@@ -2,10 +2,30 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Loader2, Pencil, Plus, Search, Trash2, Users, Link2, Unlink, CheckCircle2, AlertCircle } from "lucide-react";
+import {
+  Loader2,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  Users,
+  Link2,
+  Unlink,
+  CheckCircle2,
+  AlertCircle,
+  Phone,
+  WifiOff,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, ShellCard, fieldClass, labelClass } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
+import { useOnlineStatus } from "@/hooks/use-online-status";
+import {
+  addPendingFarmer,
+  getPendingFarmers,
+  cacheFarmers,
+  getCachedFarmers,
+} from "@/lib/offline-queue";
 import {
   Dialog,
   DialogContent,
@@ -45,6 +65,7 @@ type Farmer = {
   phone: string | null;
   linked_user_id: string | null;
   created_at: string;
+  is_offline_pending?: boolean;
 };
 
 type FarmerAccount = {
@@ -57,14 +78,23 @@ const formSchema = z.object({
   farmer_code: z
     .string()
     .trim()
-    .min(3, "Farmer ID must be at least 3 characters")
-    .max(20, "Farmer ID too long")
+    .min(3, "National ID / Member ID must be at least 3 characters")
+    .max(25, "ID too long")
     .regex(/^[A-Za-z0-9-]+$/, "Use letters, numbers, and hyphens only"),
-  full_name: z.string().trim().min(2, "Name must be at least 2 characters").max(100),
+  full_name: z.string().trim().min(2, "Full name must be at least 2 characters").max(100),
+  phone: z
+    .string()
+    .trim()
+    .min(9, "Mobile Phone Number is required")
+    .regex(
+      /^(?:(?:\+?254|0)[17]\d{8}|\+?[1-9]\d{8,14})$/,
+      "Enter a valid phone number (e.g., 0712345678 or +254712345678)",
+    ),
   location: z.string().trim().max(100).optional(),
 });
 
 function Farmers() {
+  const online = useOnlineStatus();
   const [rows, setRows] = useState<Farmer[] | null>(null);
   const [q, setQ] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -87,7 +117,46 @@ function Farmers() {
       .from("farmers")
       .select("farmer_code, full_name, location, phone, linked_user_id, created_at")
       .order("farmer_code")
-      .then(({ data }) => setRows((data as Farmer[]) ?? []));
+      .then(({ data, error }) => {
+        const pending = getPendingFarmers().filter((p) => !p.synced);
+        const pendingRows: Farmer[] = pending.map((p) => ({
+          farmer_code: p.farmer_code,
+          full_name: p.full_name,
+          phone: p.phone,
+          location: p.location,
+          linked_user_id: null,
+          created_at: p.queued_at,
+          is_offline_pending: true,
+        }));
+
+        if (!error && data) {
+          const list = data as Farmer[];
+          cacheFarmers(
+            list.map((f) => ({
+              farmer_code: f.farmer_code,
+              full_name: f.full_name,
+              phone: f.phone,
+              location: f.location,
+            })),
+          );
+          const remoteCodes = new Set(list.map((f) => f.farmer_code));
+          const uncommitted = pendingRows.filter((p) => !remoteCodes.has(p.farmer_code));
+          setRows([...uncommitted, ...list]);
+        } else {
+          const cached = getCachedFarmers();
+          const cachedRows: Farmer[] = cached.map((c) => ({
+            farmer_code: c.farmer_code,
+            full_name: c.full_name,
+            phone: c.phone ?? null,
+            location: c.location ?? null,
+            linked_user_id: null,
+            created_at: new Date().toISOString(),
+          }));
+          const existing = new Set(cachedRows.map((c) => c.farmer_code));
+          const uncommitted = pendingRows.filter((p) => !existing.has(p.farmer_code));
+          setRows([...uncommitted, ...cachedRows]);
+        }
+      });
   }
 
   function loadAccounts() {
@@ -110,6 +179,7 @@ function Farmers() {
         !s ||
         r.farmer_code.toLowerCase().includes(s) ||
         r.full_name.toLowerCase().includes(s) ||
+        r.phone?.toLowerCase().includes(s) ||
         r.location?.toLowerCase().includes(s),
     );
   }, [rows, q]);
@@ -122,7 +192,12 @@ function Farmers() {
 
   function openEdit(f: Farmer) {
     setEditing(f);
-    setForm({ farmer_code: f.farmer_code, full_name: f.full_name, location: f.location ?? "", phone: f.phone ?? "" });
+    setForm({
+      farmer_code: f.farmer_code,
+      full_name: f.full_name,
+      location: f.location ?? "",
+      phone: f.phone ?? "",
+    });
     setShowForm(true);
   }
 
@@ -171,25 +246,55 @@ function Farmers() {
         .update({
           full_name: p.data.full_name,
           location: p.data.location || null,
-          phone: form.phone || null,
+          phone: p.data.phone,
         })
         .eq("farmer_code", editing.farmer_code);
       setBusy(false);
       if (error) return void toast.error("Could not update farmer. Please try again.");
       toast.success("Farmer updated successfully");
     } else {
+      if (!online) {
+        addPendingFarmer({
+          localId: "pf-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6),
+          farmer_code: p.data.farmer_code,
+          full_name: p.data.full_name,
+          phone: p.data.phone,
+          location: p.data.location || null,
+          queued_at: new Date().toISOString(),
+          synced: false,
+          error: null,
+        });
+        setBusy(false);
+        setShowForm(false);
+        toast.success("Saved offline! Member registered locally and will sync when online.");
+        loadFarmers();
+        return;
+      }
+
       const { error } = await supabase.from("farmers").insert({
         farmer_code: p.data.farmer_code,
         full_name: p.data.full_name,
         location: p.data.location || null,
-        phone: form.phone || null,
+        phone: p.data.phone,
       });
       setBusy(false);
       if (error) {
-        if (error.code === "23505") return void toast.error("A farmer with that ID already exists.");
-        return void toast.error("Could not add farmer. Please try again.");
+        if (error.code === "23505")
+          return void toast.error("A farmer with that ID already exists.");
+        addPendingFarmer({
+          localId: "pf-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6),
+          farmer_code: p.data.farmer_code,
+          full_name: p.data.full_name,
+          phone: p.data.phone,
+          location: p.data.location || null,
+          queued_at: new Date().toISOString(),
+          synced: false,
+          error: error.message,
+        });
+        toast.info("Connection failed: saved locally. Will sync automatically.");
+      } else {
+        toast.success("Member added successfully");
       }
-      toast.success("Farmer added successfully");
     }
     setShowForm(false);
     loadFarmers();
@@ -198,9 +303,13 @@ function Farmers() {
   async function confirmDelete() {
     if (!deleting) return;
     setBusy(true);
-    const { error } = await supabase.from("farmers").delete().eq("farmer_code", deleting.farmer_code);
+    const { error } = await supabase
+      .from("farmers")
+      .delete()
+      .eq("farmer_code", deleting.farmer_code);
     setBusy(false);
-    if (error) return void toast.error("Could not delete farmer. They may have existing collections.");
+    if (error)
+      return void toast.error("Could not delete farmer. They may have existing collections.");
     toast.success("Farmer removed");
     setDeleting(null);
     loadFarmers();
@@ -270,16 +379,32 @@ function Farmers() {
             {/* Mobile cards */}
             <ul className="space-y-2.5 sm:hidden">
               {filtered.map((f) => (
-                <li key={f.farmer_code} className="rounded-lg bg-muted/50 p-3.5 ring-1 ring-border/60">
+                <li
+                  key={f.farmer_code}
+                  className="rounded-lg bg-muted/50 p-3.5 ring-1 ring-border/60"
+                >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate font-bold">{f.full_name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-bold">{f.full_name}</p>
+                        {f.is_offline_pending && (
+                          <span className="rounded-full bg-maziwa-orange/20 px-2 py-0.5 text-[10px] font-bold text-maziwa-orange-deep">
+                            Queued
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground">
-                        {f.farmer_code} · {f.location ?? "No location"}
+                        ID: {f.farmer_code} · {f.location ?? "No location"}
                       </p>
+                      {f.phone && (
+                        <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                          <Phone className="size-3" /> {f.phone}
+                        </p>
+                      )}
                       {f.linked_user_id ? (
                         <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-maziwa-green-deep">
-                          <CheckCircle2 className="size-3" /> {linkedAccountMap.get(f.linked_user_id)?.full_name ?? "Linked"}
+                          <CheckCircle2 className="size-3" />{" "}
+                          {linkedAccountMap.get(f.linked_user_id)?.full_name ?? "Linked"}
                         </p>
                       ) : (
                         <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-maziwa-orange-deep">
@@ -288,18 +413,42 @@ function Farmers() {
                       )}
                     </div>
                     <div className="flex shrink-0 gap-1">
-                      <Button variant="ghost" size="icon" className="size-8" onClick={() => openLink(f)} aria-label={`Link account for ${f.full_name}`}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        onClick={() => openLink(f)}
+                        aria-label={`Link account for ${f.full_name}`}
+                      >
                         <Link2 className="size-4" />
                       </Button>
                       {f.linked_user_id && (
-                        <Button variant="ghost" size="icon" className="size-8" onClick={() => setUnlinkTarget(f)} aria-label={`Unlink account for ${f.full_name}`}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          onClick={() => setUnlinkTarget(f)}
+                          aria-label={`Unlink account for ${f.full_name}`}
+                        >
                           <Unlink className="size-4" />
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" className="size-8" onClick={() => openEdit(f)} aria-label={`Edit ${f.full_name}`}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        onClick={() => openEdit(f)}
+                        aria-label={`Edit ${f.full_name}`}
+                      >
                         <Pencil className="size-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="size-8 text-destructive hover:text-destructive" onClick={() => setDeleting(f)} aria-label={`Delete ${f.full_name}`}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-destructive hover:text-destructive"
+                        onClick={() => setDeleting(f)}
+                        aria-label={`Delete ${f.full_name}`}
+                      >
                         <Trash2 className="size-4" />
                       </Button>
                     </div>
@@ -311,11 +460,12 @@ function Farmers() {
             <table className="hidden w-full text-sm sm:table">
               <thead>
                 <tr className="border-b border-border text-left text-xs text-muted-foreground uppercase">
-                  <th className="py-2 pr-2">Farmer ID</th>
+                  <th className="py-2 pr-2">National ID / Member ID</th>
                   <th className="pr-2">Full Name</th>
+                  <th className="pr-2">Mobile Phone</th>
                   <th className="pr-2">Location</th>
                   <th className="pr-2">Linked Account</th>
-                  <th className="pr-2">Registered</th>
+                  <th className="pr-2">Status</th>
                   <th className="text-right">Actions</th>
                 </tr>
               </thead>
@@ -324,6 +474,9 @@ function Farmers() {
                   <tr key={f.farmer_code} className="border-b border-border/60 last:border-0">
                     <td className="py-3 pr-2 font-mono font-semibold">{f.farmer_code}</td>
                     <td className="pr-2 font-semibold">{f.full_name}</td>
+                    <td className="pr-2 font-mono text-xs text-muted-foreground">
+                      {f.phone ?? "—"}
+                    </td>
                     <td className="pr-2 text-muted-foreground">{f.location ?? "—"}</td>
                     <td className="pr-2">
                       {f.linked_user_id ? (
@@ -337,12 +490,20 @@ function Farmers() {
                         </span>
                       )}
                     </td>
-                    <td className="pr-2 text-muted-foreground whitespace-nowrap">
-                      {new Date(f.created_at).toLocaleDateString("en-KE", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
+                    <td className="pr-2">
+                      {f.is_offline_pending ? (
+                        <span className="rounded-full bg-maziwa-orange/20 px-2.5 py-0.5 text-xs font-bold text-maziwa-orange-deep">
+                          Queued (Offline)
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {new Date(f.created_at).toLocaleDateString("en-KE", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </span>
+                      )}
                     </td>
                     <td className="text-right">
                       <div className="inline-flex gap-1">
@@ -400,37 +561,59 @@ function Farmers() {
       <Dialog open={showForm} onOpenChange={setShowForm}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Farmer" : "Add New Farmer"}</DialogTitle>
+            <DialogTitle>{editing ? "Edit Member Details" : "Register Member"}</DialogTitle>
             <DialogDescription>
               {editing
-                ? "Update farmer details. The Farmer ID cannot be changed."
-                : "Register a new dairy farmer in the directory."}
+                ? "Update member details. National ID / Member ID cannot be changed."
+                : "Register a dairy member with National ID and Mobile Phone Number."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-4">
             <div>
-              <label className={labelClass} htmlFor="f_code">Farmer ID</label>
+              <label className={labelClass} htmlFor="f_code">
+                National ID / Member ID <span className="text-destructive">*</span>
+              </label>
               <input
                 id="f_code"
                 className={fieldClass}
                 value={form.farmer_code}
                 onChange={(e) => setForm((s) => ({ ...s, farmer_code: e.target.value }))}
-                placeholder="e.g. MF-1009"
+                placeholder="e.g. 12345678 or MF-1009"
                 disabled={!!editing}
+                required
               />
             </div>
             <div>
-              <label className={labelClass} htmlFor="f_name">Full Name</label>
+              <label className={labelClass} htmlFor="f_name">
+                Full Name <span className="text-destructive">*</span>
+              </label>
               <input
                 id="f_name"
                 className={fieldClass}
                 value={form.full_name}
                 onChange={(e) => setForm((s) => ({ ...s, full_name: e.target.value }))}
                 placeholder="e.g. Joyce Wanjiku"
+                required
               />
             </div>
             <div>
-              <label className={labelClass} htmlFor="f_loc">Location (optional)</label>
+              <label className={labelClass} htmlFor="f_phone">
+                Mobile Phone Number <span className="text-destructive">*</span>
+              </label>
+              <input
+                id="f_phone"
+                type="tel"
+                className={fieldClass}
+                value={form.phone}
+                onChange={(e) => setForm((s) => ({ ...s, phone: e.target.value }))}
+                placeholder="e.g. 0712345678 or +254712345678"
+                required
+              />
+            </div>
+            <div>
+              <label className={labelClass} htmlFor="f_loc">
+                Location (optional)
+              </label>
               <input
                 id="f_loc"
                 className={fieldClass}
@@ -439,23 +622,13 @@ function Farmers() {
                 placeholder="e.g. Nakuru"
               />
             </div>
-            <div>
-              <label className={labelClass} htmlFor="f_phone">Phone (optional)</label>
-              <input
-                id="f_phone"
-                className={fieldClass}
-                value={form.phone}
-                onChange={(e) => setForm((s) => ({ ...s, phone: e.target.value }))}
-                placeholder="e.g. 0712345678"
-              />
-            </div>
             <Button
               type="submit"
               disabled={busy}
               className="pill-action h-auto justify-center bg-maziwa-blue hover:bg-maziwa-blue/90 disabled:opacity-60"
             >
               {busy && <Loader2 className="size-4 animate-spin" />}
-              {editing ? "Save Changes" : "Add Farmer"}
+              {editing ? "Save Changes" : "Register Member"}
             </Button>
           </form>
         </DialogContent>
@@ -467,7 +640,8 @@ function Farmers() {
           <DialogHeader>
             <DialogTitle>Link Farmer Account</DialogTitle>
             <DialogDescription>
-              Link {linkTarget?.full_name} ({linkTarget?.farmer_code}) to a farmer sign-in account. This lets the farmer log in and see their deliveries, payments, and notifications.
+              Link {linkTarget?.full_name} ({linkTarget?.farmer_code}) to a farmer sign-in account.
+              This lets the farmer log in and see their deliveries, payments, and notifications.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -475,13 +649,16 @@ function Farmers() {
               <div className="rounded-lg bg-muted/50 p-4 text-center">
                 <AlertCircle className="mx-auto size-8 text-maziwa-orange-deep" />
                 <p className="mt-2 text-sm text-muted-foreground">
-                  No unlinked farmer accounts found. The farmer needs to sign up first (creating an account with role "farmer") before you can link them here.
+                  No unlinked farmer accounts found. The farmer needs to sign up first (creating an
+                  account with role "farmer") before you can link them here.
                 </p>
               </div>
             ) : (
               <>
                 <div>
-                  <label className={labelClass} htmlFor="link_select">Select account</label>
+                  <label className={labelClass} htmlFor="link_select">
+                    Select account
+                  </label>
                   <select
                     id="link_select"
                     className={fieldClass}
@@ -490,7 +667,9 @@ function Farmers() {
                   >
                     <option value="">Choose a farmer account…</option>
                     {unlinkedAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>{a.full_name}</option>
+                      <option key={a.id} value={a.id}>
+                        {a.full_name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -514,7 +693,9 @@ function Farmers() {
           <AlertDialogHeader>
             <AlertDialogTitle>Unlink Farmer Account?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will disconnect {unlinkTarget?.full_name} ({unlinkTarget?.farmer_code}) from their sign-in account. The farmer will no longer be able to see their deliveries or notifications on login. This does not delete the account or the farmer record.
+              This will disconnect {unlinkTarget?.full_name} ({unlinkTarget?.farmer_code}) from
+              their sign-in account. The farmer will no longer be able to see their deliveries or
+              notifications on login. This does not delete the account or the farmer record.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

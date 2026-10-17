@@ -2,10 +2,27 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Loader2, WifiOff, Clock } from "lucide-react";
+import {
+  Loader2,
+  WifiOff,
+  Clock,
+  Printer,
+  CheckCircle2,
+  ArrowRight,
+  PlusCircle,
+  Receipt,
+  FileCheck2,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, ShellCard, fieldClass, labelClass } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import {
   addPendingCollection,
@@ -16,7 +33,7 @@ import {
   getPendingCollections,
   onQueueUpdate,
   removePendingCollection,
-  syncPendingCollections,
+  syncAllPending,
   type PendingCollection,
 } from "@/lib/offline-queue";
 
@@ -38,6 +55,13 @@ const GRADES = ["Grade A", "Grade B", "Grade C", "Rejected"] as const;
 const statusFor = (g: string) =>
   g === "Rejected" ? "Rejected" : g === "Grade C" ? "Pending Test" : "Accepted";
 
+const DEFAULT_PRICES: Record<string, number> = {
+  "Grade A": 55,
+  "Grade B": 45,
+  "Grade C": 35,
+  Rejected: 0,
+};
+
 const schema = z.object({
   farmer_code: z.string().min(1, "Select a farmer"),
   quantity_kg: z.coerce
@@ -54,16 +78,34 @@ function nowLocal() {
   return d.toISOString().slice(0, 16);
 }
 
+type DeliveryReceipt = {
+  receiptId: string;
+  farmerCode: string;
+  farmerName: string;
+  phone?: string | null;
+  quantityKg: number;
+  qualityGrade: string;
+  pricePerKg: number;
+  totalPayout: number;
+  collectedAt: string;
+  clerkName: string;
+  isOffline: boolean;
+};
+
 function ReceiveMilk() {
   const navigate = useNavigate();
   const { user } = Route.useRouteContext();
   const online = useOnlineStatus();
-  const [farmers, setFarmers] = useState<{ farmer_code: string; full_name: string }[]>(
-    getCachedFarmers(),
-  );
+  const [farmers, setFarmers] = useState<
+    { farmer_code: string; full_name: string; phone?: string | null }[]
+  >(getCachedFarmers());
   const [priceMap, setPriceMap] = useState<Record<string, number>>(getCachedPrices());
   const [usingCache, setUsingCache] = useState(!online);
   const [pending, setPending] = useState<PendingCollection[]>(getPendingCollections());
+  const [clerkName, setClerkName] = useState<string>("Staff Member");
+  const [receipt, setReceipt] = useState<DeliveryReceipt | null>(null);
+  const [showReceipt, setShowReceipt] = useState(false);
+
   const [f, setF] = useState({
     farmer_code: "",
     quantity_kg: "",
@@ -71,6 +113,22 @@ function ReceiveMilk() {
     collected_at: nowLocal(),
   });
   const [busy, setBusy] = useState(false);
+
+  // Load clerk profile name
+  useEffect(() => {
+    supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.full_name) {
+          setClerkName(data.full_name);
+        } else if (user.email) {
+          setClerkName(user.email.split("@")[0]);
+        }
+      });
+  }, [user.id, user.email]);
 
   useEffect(() => {
     return onQueueUpdate(() => setPending(getPendingCollections()));
@@ -80,7 +138,7 @@ function ReceiveMilk() {
     if (!online) return;
     supabase
       .from("farmers")
-      .select("farmer_code, full_name")
+      .select("farmer_code, full_name, phone")
       .order("farmer_code")
       .then(({ data }) => {
         if (data && data.length > 0) {
@@ -89,6 +147,7 @@ function ReceiveMilk() {
           setUsingCache(false);
         }
       });
+
     supabase
       .from("milk_prices")
       .select("grade, price_per_ksh")
@@ -107,106 +166,181 @@ function ReceiveMilk() {
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setF((s) => ({ ...s, [k]: e.target.value }));
 
+  function getActivePrice(grade: string): number {
+    if (grade === "Rejected") return 0;
+    return priceMap[grade] ?? DEFAULT_PRICES[grade] ?? 50;
+  }
+
+  const activeUnitPrice = getActivePrice(f.quality_grade);
+  const calculatedLiveTotal =
+    f.quantity_kg && Number(f.quantity_kg) > 0 && f.quality_grade !== "Rejected"
+      ? Math.round(Number(f.quantity_kg) * activeUnitPrice * 100) / 100
+      : 0;
+
+  async function sendReceiptSms(payload: {
+    phone?: string | null;
+    farmer_name: string;
+    farmer_code: string;
+    quantity_kg: number;
+    quality_grade: string;
+    price_per_ksh: number;
+    total_payout_ksh: number;
+    collection_id: string;
+  }) {
+    try {
+      const { data, error } = await supabase.functions.invoke("send-sms", {
+        body: payload,
+      });
+      if (error) {
+        console.warn("SMS edge dispatch warning:", error.message);
+      } else {
+        console.log("SMS receipt result:", data);
+      }
+    } catch (smsErr) {
+      console.warn("SMS receipt trigger failed:", smsErr);
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const p = schema.safeParse(f);
     if (!p.success) return void toast.error(p.error.issues[0]?.message ?? "Invalid input");
     setBusy(true);
 
+    const farmer = farmers.find((x) => x.farmer_code === p.data.farmer_code);
+    const unitPrice = getActivePrice(p.data.quality_grade);
+    const totalPayout =
+      p.data.quality_grade === "Rejected"
+        ? 0
+        : Math.round(p.data.quantity_kg * unitPrice * 100) / 100;
+
+    // OFFLINE MODE
     if (!online) {
-      const farmer = farmers.find((x) => x.farmer_code === p.data.farmer_code);
-      const localId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      addPendingCollection({
+      const localId = `off_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const saved = addPendingCollection({
         localId,
         farmer_code: p.data.farmer_code,
         farmer_name: farmer?.full_name ?? p.data.farmer_code,
         quantity_kg: p.data.quantity_kg,
         quality_grade: p.data.quality_grade,
         status: statusFor(p.data.quality_grade),
+        price_per_ksh: unitPrice,
         collected_at: new Date(p.data.collected_at).toISOString(),
         received_by: user.id,
         queued_at: new Date().toISOString(),
         synced: false,
         error: null,
       });
-      toast.success(`Saved offline — ${p.data.quantity_kg} kg from ${farmer?.full_name ?? p.data.farmer_code}. Will sync when online.`);
+
+      if (!saved) {
+        setBusy(false);
+        toast.error("Could not save offline. Free device storage and try again.");
+        return;
+      }
+
+      toast.success(
+        `Saved offline — ${p.data.quantity_kg} kg from ${farmer?.full_name ?? p.data.farmer_code}.`,
+      );
+
+      setReceipt({
+        receiptId: `OFF-${localId.slice(-6).toUpperCase()}`,
+        farmerCode: p.data.farmer_code,
+        farmerName: farmer?.full_name ?? p.data.farmer_code,
+        phone: farmer?.phone ?? null,
+        quantityKg: p.data.quantity_kg,
+        qualityGrade: p.data.quality_grade,
+        pricePerKg: unitPrice,
+        totalPayout,
+        collectedAt: new Date(p.data.collected_at).toISOString(),
+        clerkName,
+        isOffline: true,
+      });
+      setShowReceipt(true);
       setBusy(false);
-      setF({ farmer_code: "", quantity_kg: "", quality_grade: "Grade A", collected_at: nowLocal() });
       return;
     }
 
-    const { error } = await supabase.from("collections").insert({
-      farmer_code: p.data.farmer_code,
-      quantity_kg: p.data.quantity_kg,
-      quality_grade: p.data.quality_grade,
-      status: statusFor(p.data.quality_grade),
-      collected_at: new Date(p.data.collected_at).toISOString(),
-      received_by: user.id,
-    });
+    // ONLINE MODE
+    const { data: inserted, error } = await supabase
+      .from("collections")
+      .insert({
+        farmer_code: p.data.farmer_code,
+        quantity_kg: p.data.quantity_kg,
+        quality_grade: p.data.quality_grade,
+        status: statusFor(p.data.quality_grade),
+        price_per_ksh: unitPrice,
+        collected_at: new Date(p.data.collected_at).toISOString(),
+        received_by: user.id,
+      })
+      .select("id, collected_at")
+      .maybeSingle();
+
     if (error) {
       setBusy(false);
       return void toast.error("Could not save collection. Please try again.");
     }
 
-    const farmer = farmers.find((x) => x.farmer_code === p.data.farmer_code);
+    const collectionId = inserted?.id || `REC-${Date.now().toString(36).toUpperCase()}`;
+
+    // Send SMS receipt alert to farmer
+    if (p.data.quality_grade !== "Rejected") {
+      void sendReceiptSms({
+        phone: farmer?.phone ?? null,
+        farmer_name: farmer?.full_name ?? p.data.farmer_code,
+        farmer_code: p.data.farmer_code,
+        quantity_kg: p.data.quantity_kg,
+        quality_grade: p.data.quality_grade,
+        price_per_ksh: unitPrice,
+        total_payout_ksh: totalPayout,
+        collection_id: collectionId,
+      });
+    }
+
     toast.success(
       `Recorded ${p.data.quantity_kg} kg from ${farmer?.full_name ?? p.data.farmer_code}`,
     );
 
-    if (p.data.quality_grade !== "Rejected") {
-      try {
-        const { data: farmerRow } = await supabase
-          .from("farmers")
-          .select("phone")
-          .eq("farmer_code", p.data.farmer_code)
-          .maybeSingle();
-
-        const { data: cumRows } = await supabase
-          .from("collections")
-          .select("quantity_kg")
-          .eq("farmer_code", p.data.farmer_code)
-          .eq("status", "Accepted");
-
-        const cumulativeKg = (cumRows ?? []).reduce((a, r) => a + Number(r.quantity_kg), 0);
-
-        const smsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-sms`;
-        await fetch(smsUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
-          body: JSON.stringify({
-            farmer_code: p.data.farmer_code,
-            farmer_name: farmer?.full_name,
-            phone: farmerRow?.phone ?? null,
-            quantity_kg: p.data.quantity_kg,
-            cumulative_kg: cumulativeKg,
-            collected_at: new Date(p.data.collected_at).toLocaleString("en-KE"),
-          }),
-        });
-      } catch {
-        // SMS failure shouldn't block the collection save
-      }
-    }
-
+    setReceipt({
+      receiptId: collectionId.slice(0, 8).toUpperCase(),
+      farmerCode: p.data.farmer_code,
+      farmerName: farmer?.full_name ?? p.data.farmer_code,
+      phone: farmer?.phone ?? null,
+      quantityKg: p.data.quantity_kg,
+      qualityGrade: p.data.quality_grade,
+      pricePerKg: unitPrice,
+      totalPayout,
+      collectedAt: inserted?.collected_at || new Date(p.data.collected_at).toISOString(),
+      clerkName,
+      isOffline: false,
+    });
+    setShowReceipt(true);
     setBusy(false);
-    navigate({ to: "/collections" });
+  }
+
+  function handleResetForNext() {
+    setF({
+      farmer_code: "",
+      quantity_kg: "",
+      quality_grade: "Grade A",
+      collected_at: nowLocal(),
+    });
+    setShowReceipt(false);
   }
 
   async function handleSyncNow() {
-    const results = await syncPendingCollections((p) => ({
-      farmer_code: p.farmer_code,
-      quantity_kg: p.quantity_kg,
-      quality_grade: p.quality_grade,
-      status: p.status,
-      collected_at: p.collected_at,
-      received_by: p.received_by,
-    }));
-    const ok = results.filter((r) => r.success).length;
-    const fail = results.filter((r) => !r.success).length;
-    if (ok > 0) toast.success(`Synced ${ok} pending collection${ok > 1 ? "s" : ""}`);
-    if (fail > 0) toast.error(`${fail} collection${fail > 1 ? "s" : ""} failed to sync`);
+    const summary = await syncAllPending();
+    const totalSynced = summary.farmersSynced + summary.collectionsSynced;
+    const totalFailed = summary.farmersFailed + summary.collectionsFailed;
+
+    if (totalSynced > 0) {
+      const parts = [];
+      if (summary.farmersSynced > 0) parts.push(`${summary.farmersSynced} member(s)`);
+      if (summary.collectionsSynced > 0) parts.push(`${summary.collectionsSynced} collection(s)`);
+      toast.success(`Synced ${parts.join(" and ")} successfully!`);
+    }
+    if (totalFailed > 0) {
+      toast.error(`${totalFailed} record(s) failed to sync. Check network and retry.`);
+    }
     setPending(getPendingCollections());
   }
 
@@ -216,10 +350,12 @@ function ReceiveMilk() {
         <div className="mb-3 flex items-center gap-2 rounded-lg bg-maziwa-orange/10 p-3 ring-1 ring-maziwa-orange/30">
           <WifiOff className="size-4 shrink-0 text-maziwa-orange-deep" />
           <p className="text-xs font-semibold text-maziwa-orange-deep">
-            You're offline. Collections will be saved locally and synced automatically when you reconnect.
+            You're offline. Collections will be saved locally with receipts and synced
+            automatically when you reconnect.
           </p>
         </div>
       )}
+
       {online && usingCache && farmers.length > 0 && (
         <div className="mb-3 flex items-center gap-2 rounded-lg bg-muted/40 p-3 ring-1 ring-border/60">
           <Clock className="size-4 shrink-0 text-muted-foreground" />
@@ -228,10 +364,13 @@ function ReceiveMilk() {
           </p>
         </div>
       )}
+
       {pending.filter((p) => !p.synced).length > 0 && (
         <ShellCard>
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-bold">Pending Sync ({pending.filter((p) => !p.synced).length})</h3>
+            <h3 className="text-sm font-bold">
+              Pending Sync ({pending.filter((p) => !p.synced).length})
+            </h3>
             {online && (
               <Button
                 size="sm"
@@ -243,44 +382,47 @@ function ReceiveMilk() {
             )}
           </div>
           <ul className="space-y-2">
-            {pending.filter((p) => !p.synced).map((p) => (
-              <li
-                key={p.localId}
-                className="flex items-center justify-between gap-2 rounded-lg bg-muted/30 p-2.5 ring-1 ring-border/40"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-semibold">
-                    {p.quantity_kg} kg — {p.farmer_name}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {new Date(p.collected_at).toLocaleString("en-KE", {
-                      day: "numeric",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                    {p.error ? ` · Error: ${p.error}` : " · Queued"}
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    removePendingCollection(p.localId);
-                    setPending(getPendingCollections());
-                  }}
-                  className="shrink-0 text-xs font-bold text-destructive hover:text-destructive/80"
+            {pending
+              .filter((p) => !p.synced)
+              .map((p) => (
+                <li
+                  key={p.localId}
+                  className="flex items-center justify-between gap-2 rounded-lg bg-muted/30 p-2.5 ring-1 ring-border/40"
                 >
-                  Discard
-                </button>
-              </li>
-            ))}
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold">
+                      {p.quantity_kg} kg — {p.farmer_name}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {new Date(p.collected_at).toLocaleString("en-KE", {
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                      {p.error ? ` · Error: ${p.error}` : " · Queued"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      removePendingCollection(p.localId);
+                      setPending(getPendingCollections());
+                    }}
+                    className="shrink-0 text-xs font-bold text-destructive hover:text-destructive/80"
+                  >
+                    Discard
+                  </button>
+                </li>
+              ))}
           </ul>
         </ShellCard>
       )}
+
       <ShellCard>
         <form onSubmit={submit} className="space-y-5">
           <div>
             <label className={labelClass} htmlFor="farmer">
-              Farmer ID
+              Farmer / Member
             </label>
             <select
               id="farmer"
@@ -291,14 +433,15 @@ function ReceiveMilk() {
               <option value="">Select farmer…</option>
               {farmers.map((x) => (
                 <option key={x.farmer_code} value={x.farmer_code}>
-                  {x.farmer_code} — {x.full_name}
+                  {x.farmer_code} — {x.full_name} {x.phone ? `(${x.phone})` : ""}
                 </option>
               ))}
             </select>
           </div>
+
           <div>
             <label className={labelClass} htmlFor="qty">
-              Milk Quantity (kg)
+              Milk Quantity (kg / Liters)
             </label>
             <input
               id="qty"
@@ -312,6 +455,7 @@ function ReceiveMilk() {
               placeholder="e.g. 45"
             />
           </div>
+
           <div>
             <span className={labelClass}>Quality Grade</span>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -334,9 +478,34 @@ function ReceiveMilk() {
               ))}
             </div>
           </div>
+
+          {/* Real-time Payout Calculation Callout */}
+          {f.quantity_kg && Number(f.quantity_kg) > 0 ? (
+            <div className="rounded-xl border border-maziwa-green/30 bg-maziwa-green/10 p-3.5 text-foreground">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Active Milk Price ({f.quality_grade})</span>
+                <span className="font-semibold text-foreground">
+                  KSh {activeUnitPrice.toFixed(2)} / kg
+                </span>
+              </div>
+              <div className="mt-2 flex items-baseline justify-between border-t border-maziwa-green/20 pt-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-maziwa-green-deep">
+                  Calculated Farmer Payout
+                </span>
+                <span className="text-xl font-extrabold text-maziwa-green-deep">
+                  KSh{" "}
+                  {calculatedLiveTotal.toLocaleString("en-KE", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
+            </div>
+          ) : null}
+
           <div>
             <label className={labelClass} htmlFor="time">
-              Timestamp
+              Collection Timestamp
             </label>
             <input
               id="time"
@@ -346,23 +515,151 @@ function ReceiveMilk() {
               onChange={set("collected_at")}
             />
           </div>
+
           <Button
             type="submit"
             disabled={busy}
             className="pill-action mt-1 h-auto justify-center bg-maziwa-green hover:bg-maziwa-green-deep disabled:opacity-60"
           >
-            {busy && <Loader2 className="size-4 animate-spin" />} Save Collection
+            {busy && <Loader2 className="size-4 animate-spin mr-1.5" />}
+            Save & Generate Receipt
           </Button>
-          {f.quantity_kg && Number(f.quantity_kg) > 0 && f.quality_grade !== "Rejected" && priceMap[f.quality_grade] ? (
-            <div className="flex items-center justify-between rounded-lg bg-maziwa-green/8 p-3.5 ring-1 ring-maziwa-green/15">
-              <span className="text-sm font-semibold text-maziwa-green-deep">Estimated value</span>
-              <span className="text-lg font-extrabold text-maziwa-green-deep">
-                KSh {(Number(f.quantity_kg) * priceMap[f.quality_grade]).toLocaleString("en-KE")}
-              </span>
-            </div>
-          ) : null}
         </form>
       </ShellCard>
+
+      {/* DELIVERY RECEIPT MODAL DIALOG */}
+      <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
+        <DialogContent className="max-w-md p-5 sm:p-6 print:m-0 print:p-0 print:border-none print:shadow-none">
+          <DialogHeader className="text-center sm:text-center">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-maziwa-green/15 text-maziwa-green-deep mb-2">
+              <FileCheck2 className="size-6" />
+            </div>
+            <DialogTitle className="text-lg font-bold">Milk Delivery Receipt</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Official dairy collection confirmation receipt
+            </DialogDescription>
+          </DialogHeader>
+
+          {receipt && (
+            <div className="mt-2 space-y-4">
+              <div className="flex items-center justify-between border-b pb-2 text-xs">
+                <span className="text-muted-foreground">Receipt Number:</span>
+                <span className="font-mono font-bold text-foreground">#{receipt.receiptId}</span>
+              </div>
+
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Sync Status:</span>
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold text-[11px] ${
+                    receipt.isOffline
+                      ? "bg-maziwa-orange/15 text-maziwa-orange-deep"
+                      : "bg-maziwa-green/15 text-maziwa-green-deep"
+                  }`}
+                >
+                  <CheckCircle2 className="size-3" />
+                  {receipt.isOffline ? "Queued Offline" : "Online Confirmed"}
+                </span>
+              </div>
+
+              <div className="rounded-lg bg-muted/40 p-3 space-y-2 text-xs ring-1 ring-border/50">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Farmer:</span>
+                  <span className="font-semibold text-foreground">
+                    {receipt.farmerCode} — {receipt.farmerName}
+                  </span>
+                </div>
+                {receipt.phone && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Mobile Phone:</span>
+                    <span className="font-mono text-foreground">{receipt.phone}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Date & Time:</span>
+                  <span className="text-foreground">
+                    {new Date(receipt.collectedAt).toLocaleString("en-KE", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Quality Grade:</span>
+                  <span className="font-semibold text-foreground">{receipt.qualityGrade}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Delivered Quantity:</span>
+                  <span className="font-extrabold text-foreground">{receipt.quantityKg} kg</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Rate per kg:</span>
+                  <span className="text-foreground">KSh {receipt.pricePerKg.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Receiving Clerk:</span>
+                  <span className="text-foreground">{receipt.clerkName}</span>
+                </div>
+              </div>
+
+              {/* Highlighted Total Payout */}
+              <div className="rounded-xl border border-maziwa-green/30 bg-maziwa-green/10 p-3 text-center">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Total Calculated Farmer Payout
+                </p>
+                <p className="mt-0.5 text-2xl font-black text-maziwa-green-deep">
+                  KSh{" "}
+                  {receipt.totalPayout.toLocaleString("en-KE", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </p>
+              </div>
+
+              {receipt.phone ? (
+                <p className="text-center text-[11px] text-muted-foreground">
+                  An SMS receipt notification has been dispatched to {receipt.phone}.
+                </p>
+              ) : null}
+
+              {/* Action Buttons */}
+              <div className="grid grid-cols-2 gap-2 pt-1 print:hidden">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => window.print()}
+                  className="h-10 text-xs font-bold gap-1.5"
+                >
+                  <Printer className="size-3.5" /> Print / Save
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleResetForNext}
+                  className="h-10 text-xs font-bold gap-1.5 bg-maziwa-green hover:bg-maziwa-green-deep text-primary-foreground"
+                >
+                  <PlusCircle className="size-3.5" /> Next Delivery
+                </Button>
+              </div>
+
+              <div className="pt-0 print:hidden">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setShowReceipt(false);
+                    navigate({ to: "/collections" });
+                  }}
+                  className="w-full text-xs text-muted-foreground hover:text-foreground gap-1.5"
+                >
+                  View All Collections <ArrowRight className="size-3" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
