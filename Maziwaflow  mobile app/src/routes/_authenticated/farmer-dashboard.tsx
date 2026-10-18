@@ -32,7 +32,6 @@ type Collection = {
   quality_grade: string;
   status: string;
   collected_at: string;
-  price_per_ksh: number | null;
 };
 
 const FALLBACK_PRICE: Record<string, number> = {
@@ -88,7 +87,7 @@ function FarmerDashboard() {
               if (farmer) {
                 supabase
                   .from("collections")
-                  .select("id, quantity_kg, quality_grade, status, collected_at, price_per_ksh")
+                  .select("id, quantity_kg, quality_grade, status, collected_at")
                   .eq("farmer_code", farmer.farmer_code)
                   .order("collected_at", { ascending: false })
                   .then(({ data: cols }) => {
@@ -119,8 +118,7 @@ function FarmerDashboard() {
   const totalEarnings = collections
     .filter((c) => c.status !== "Rejected")
     .reduce(
-      (a, c) =>
-        a + Number(c.quantity_kg) * (c.price_per_ksh ?? FALLBACK_PRICE[c.quality_grade] ?? 0),
+      (a, c) => a + Number(c.quantity_kg) * (FALLBACK_PRICE[c.quality_grade] ?? 0),
       0,
     );
   const avgGrade =

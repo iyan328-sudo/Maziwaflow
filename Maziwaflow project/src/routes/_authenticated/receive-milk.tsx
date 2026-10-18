@@ -94,7 +94,8 @@ type DeliveryReceipt = {
 
 function ReceiveMilk() {
   const navigate = useNavigate();
-  const { user } = Route.useRouteContext();
+  const context = Route.useRouteContext();
+  const user = context?.user;
   const online = useOnlineStatus();
   const [farmers, setFarmers] = useState<
     { farmer_code: string; full_name: string; phone?: string | null }[]
@@ -116,6 +117,7 @@ function ReceiveMilk() {
 
   // Load clerk profile name
   useEffect(() => {
+    if (!user?.id) return;
     supabase
       .from("profiles")
       .select("full_name")
@@ -124,11 +126,11 @@ function ReceiveMilk() {
       .then(({ data }) => {
         if (data?.full_name) {
           setClerkName(data.full_name);
-        } else if (user.email) {
+        } else if (user?.email) {
           setClerkName(user.email.split("@")[0]);
         }
       });
-  }, [user.id, user.email]);
+  }, [user?.id, user?.email]);
 
   useEffect(() => {
     return onQueueUpdate(() => setPending(getPendingCollections()));
@@ -226,7 +228,7 @@ function ReceiveMilk() {
         status: statusFor(p.data.quality_grade),
         price_per_ksh: unitPrice,
         collected_at: new Date(p.data.collected_at).toISOString(),
-        received_by: user.id,
+        received_by: user?.id ?? "",
         queued_at: new Date().toISOString(),
         synced: false,
         error: null,
@@ -268,9 +270,8 @@ function ReceiveMilk() {
         quantity_kg: p.data.quantity_kg,
         quality_grade: p.data.quality_grade,
         status: statusFor(p.data.quality_grade),
-        price_per_ksh: unitPrice,
         collected_at: new Date(p.data.collected_at).toISOString(),
-        received_by: user.id,
+        received_by: user?.id,
       })
       .select("id, collected_at")
       .maybeSingle();

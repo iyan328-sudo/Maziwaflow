@@ -1,18 +1,35 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, CalendarDays, TrendingUp, Users, IndianRupee, Printer, Download, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Loader2,
+  CalendarDays,
+  TrendingUp,
+  Users,
+  IndianRupee,
+  Printer,
+  Download,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, ShellCard, fieldClass } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { escapeHtml, toCsvCell } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/daily-summary")({
   head: () => ({
     meta: [
       { title: "Daily Summary — Maziwaflow Mobile" },
-      { name: "description", content: "End-of-day collection summary with totals and per-farmer breakdown." },
+      {
+        name: "description",
+        content: "End-of-day collection summary with totals and per-farmer breakdown.",
+      },
       { property: "og:title", content: "Daily Summary — Maziwaflow Mobile" },
-      { property: "og:description", content: "End-of-day collection summary with totals and per-farmer breakdown." },
+      {
+        property: "og:description",
+        content: "End-of-day collection summary with totals and per-farmer breakdown.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -27,8 +44,15 @@ type Collection = {
   quality_grade: string;
   status: string;
   collected_at: string;
-  price_per_ksh: number | null;
   farmers: { full_name: string } | null;
+};
+
+// Grade-based fallback pricing (price_per_ksh does not exist in the DB)
+const DEFAULT_PRICES: Record<string, number> = {
+  "Grade A": 55,
+  "Grade B": 45,
+  "Grade C": 35,
+  Rejected: 0,
 };
 
 const STATUS_STYLE: Record<string, string> = {
@@ -45,11 +69,17 @@ const GRADE_COLORS: Record<string, string> = {
   Rejected: "text-destructive",
 };
 
-const fmtKsh = (n: number) => `KSh ${Number(n).toLocaleString("en-KE", { minimumFractionDigits: 0 })}`;
+const fmtKsh = (n: number) =>
+  `KSh ${Number(n).toLocaleString("en-KE", { minimumFractionDigits: 0 })}`;
 const fmtTime = (s: string) =>
   new Date(s).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit", hour12: true });
 const fmtFullDate = (s: string) =>
-  new Date(s + "T00:00:00").toLocaleDateString("en-KE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  new Date(s + "T00:00:00").toLocaleDateString("en-KE", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 
 function todayISO() {
   const d = new Date();
@@ -78,7 +108,7 @@ function DailySummary() {
     supabase
       .from("collections")
       .select(
-        "id, farmer_code, quantity_kg, quality_grade, status, collected_at, price_per_ksh, farmers(full_name)",
+        "id, farmer_code, quantity_kg, quality_grade, status, collected_at, farmers(full_name)",
       )
       .gte("collected_at", dayStart)
       .lte("collected_at", dayEnd)
@@ -86,10 +116,7 @@ function DailySummary() {
       .then(({ data }) => setRows((data as Collection[]) ?? []));
   }, [date]);
 
-  const activeRows = useMemo(
-    () => (rows ?? []).filter((r) => r.status !== "Voided"),
-    [rows],
-  );
+  const activeRows = useMemo(() => (rows ?? []).filter((r) => r.status !== "Voided"), [rows]);
 
   const acceptedRows = useMemo(
     () => activeRows.filter((r) => r.status === "Accepted"),
@@ -98,7 +125,7 @@ function DailySummary() {
 
   const totalKg = acceptedRows.reduce((a, r) => a + Number(r.quantity_kg), 0);
   const totalValue = acceptedRows.reduce(
-    (a, r) => a + Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0),
+    (a, r) => a + Number(r.quantity_kg) * (DEFAULT_PRICES[r.quality_grade] ?? 55),
     0,
   );
   const totalDeliveries = activeRows.length;
@@ -110,10 +137,11 @@ function DailySummary() {
   const gradeBreakdown = useMemo(() => {
     const map: Record<string, { kg: number; count: number; value: number }> = {};
     acceptedRows.forEach((r) => {
-      if (!map[r.quality_grade]) map[r.quality_grade] = { kg: 0, count: 0, value: 0 };
-      map[r.quality_grade].kg += Number(r.quantity_kg);
-      map[r.quality_grade].count += 1;
-      map[r.quality_grade].value += Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0);
+      const entry = map[r.quality_grade] ?? { kg: 0, count: 0, value: 0 };
+      map[r.quality_grade] = entry;
+      entry.kg += Number(r.quantity_kg);
+      entry.count += 1;
+      entry.value += Number(r.quantity_kg) * (DEFAULT_PRICES[r.quality_grade] ?? 55);
     });
     return Object.entries(map)
       .map(([grade, v]) => ({ grade, ...v }))
@@ -123,12 +151,16 @@ function DailySummary() {
   const farmerBreakdown = useMemo(() => {
     const map: Record<string, { name: string; kg: number; deliveries: number; value: number }> = {};
     acceptedRows.forEach((r) => {
-      if (!map[r.farmer_code]) {
-        map[r.farmer_code] = { name: r.farmers?.full_name ?? r.farmer_code, kg: 0, deliveries: 0, value: 0 };
-      }
-      map[r.farmer_code].kg += Number(r.quantity_kg);
-      map[r.farmer_code].deliveries += 1;
-      map[r.farmer_code].value += Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0);
+      const entry = map[r.farmer_code] ?? {
+        name: r.farmers?.full_name ?? r.farmer_code,
+        kg: 0,
+        deliveries: 0,
+        value: 0,
+      };
+      map[r.farmer_code] = entry;
+      entry.kg += Number(r.quantity_kg);
+      entry.deliveries += 1;
+      entry.value += Number(r.quantity_kg) * (DEFAULT_PRICES[r.quality_grade] ?? 55);
     });
     return Object.entries(map)
       .map(([code, v]) => ({ code, ...v }))
@@ -136,19 +168,31 @@ function DailySummary() {
   }, [acceptedRows]);
 
   function exportCsv() {
-    const headers = ["Farmer Code", "Farmer Name", "Quantity (kg)", "Grade", "Status", "Price/kg", "Value (KSh)", "Time"];
+    const headers = [
+      "Farmer Code",
+      "Farmer Name",
+      "Quantity (kg)",
+      "Grade",
+      "Status",
+      "Price/kg",
+      "Value (KSh)",
+      "Time",
+    ];
     const lines = activeRows.map((r) => {
-      const val = r.status === "Accepted" ? Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0) : 0;
+      const unitPrice = DEFAULT_PRICES[r.quality_grade] ?? 55;
+      const val = r.status === "Accepted" ? Number(r.quantity_kg) * unitPrice : 0;
       return [
         r.farmer_code,
         r.farmers?.full_name ?? "",
         r.quantity_kg,
         r.quality_grade,
         r.status,
-        r.price_per_ksh ?? "",
+        unitPrice,
         val.toFixed(0),
         fmtTime(r.collected_at),
-      ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",");
+      ]
+        .map(toCsvCell)
+        .join(",");
     });
     const csv = [headers.join(","), ...lines].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -163,21 +207,29 @@ function DailySummary() {
   function printReport() {
     const win = window.open("", "_blank", "width=800,height=600");
     if (!win) return void toast.error("Pop-up blocked. Please allow pop-ups to print.");
-    const farmerRowsHtml = farmerBreakdown.map((f) => `
+    const farmerRowsHtml = farmerBreakdown
+      .map(
+        (f) => `
       <tr>
-        <td>${f.name}</td>
-        <td>${f.code}</td>
+        <td>${escapeHtml(f.name)}</td>
+        <td>${escapeHtml(f.code)}</td>
         <td style="text-align:right">${f.deliveries}</td>
         <td style="text-align:right">${f.kg.toFixed(1)} kg</td>
         <td style="text-align:right">${fmtKsh(f.value)}</td>
-      </tr>`).join("");
-    const gradeRowsHtml = gradeBreakdown.map((g) => `
+      </tr>`,
+      )
+      .join("");
+    const gradeRowsHtml = gradeBreakdown
+      .map(
+        (g) => `
       <tr>
-        <td>${g.grade}</td>
+        <td>${escapeHtml(g.grade)}</td>
         <td style="text-align:right">${g.count}</td>
         <td style="text-align:right">${g.kg.toFixed(1)} kg</td>
         <td style="text-align:right">${fmtKsh(g.value)}</td>
-      </tr>`).join("");
+      </tr>`,
+      )
+      .join("");
     win.document.write(`<!DOCTYPE html><html><head><title>Maziwaflow — Daily Summary ${date}</title>
       <style>
         body{font-family:system-ui,sans-serif;margin:32px;color:#1a1a1a}
@@ -198,7 +250,7 @@ function DailySummary() {
       </style></head><body>
       <h1>Maziwaflow Mobile</h1>
       <h2>Daily Collection Summary</h2>
-      <div class="date">${fmtFullDate(date)}</div>
+      <div class="date">${escapeHtml(fmtFullDate(date))}</div>
       <div class="summary">
         <div><p>Total Volume</p><span>${totalKg.toFixed(1)} kg</span></div>
         <div><p>Total Value</p><span>${fmtKsh(totalValue)}</span></div>
@@ -260,7 +312,12 @@ function DailySummary() {
           <ChevronRight className="size-5" />
         </Button>
         {!isToday && (
-          <Button size="sm" variant="outline" className="h-10 shrink-0 rounded-lg" onClick={() => setDate(todayISO())}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-10 shrink-0 rounded-lg"
+            onClick={() => setDate(todayISO())}
+          >
             Today
           </Button>
         )}
@@ -275,7 +332,9 @@ function DailySummary() {
             <TrendingUp className="size-4 text-maziwa-green-deep" />
             <p className="text-xs font-bold text-muted-foreground uppercase">Total Volume</p>
           </div>
-          <p className="mt-1 text-2xl font-extrabold">{totalKg.toFixed(1)} <span className="text-sm">kg</span></p>
+          <p className="mt-1 text-2xl font-extrabold">
+            {totalKg.toFixed(1)} <span className="text-sm">kg</span>
+          </p>
         </div>
         <div className="rounded-lg bg-card p-4 ring-1 ring-border">
           <div className="flex items-center gap-2">
@@ -344,10 +403,20 @@ function DailySummary() {
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="text-sm font-bold">Grade Breakdown</h3>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="h-8 rounded-lg" onClick={exportCsv}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 rounded-lg"
+                    onClick={exportCsv}
+                  >
                     <Download className="size-3.5" /> CSV
                   </Button>
-                  <Button size="sm" variant="outline" className="h-8 rounded-lg" onClick={printReport}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 rounded-lg"
+                    onClick={printReport}
+                  >
                     <Printer className="size-3.5" /> Print
                   </Button>
                 </div>
@@ -366,11 +435,15 @@ function DailySummary() {
                     {gradeBreakdown.map((g) => (
                       <tr key={g.grade} className="border-b border-border/40 last:border-0">
                         <td className="py-2.5 pr-3">
-                          <span className={`font-bold ${GRADE_COLORS[g.grade] ?? ""}`}>{g.grade}</span>
+                          <span className={`font-bold ${GRADE_COLORS[g.grade] ?? ""}`}>
+                            {g.grade}
+                          </span>
                         </td>
                         <td className="pr-3 text-right">{g.count}</td>
                         <td className="pr-3 text-right font-bold">{g.kg.toFixed(1)}</td>
-                        <td className="text-right font-semibold text-maziwa-green-deep">{fmtKsh(g.value)}</td>
+                        <td className="text-right font-semibold text-maziwa-green-deep">
+                          {fmtKsh(g.value)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -393,11 +466,17 @@ function DailySummary() {
                           <p className="truncate font-bold">{f.name}</p>
                           <p className="text-xs text-muted-foreground">{f.code}</p>
                         </div>
-                        <p className="text-lg font-extrabold whitespace-nowrap">{f.kg.toFixed(1)} kg</p>
+                        <p className="text-lg font-extrabold whitespace-nowrap">
+                          {f.kg.toFixed(1)} kg
+                        </p>
                       </div>
                       <div className="mt-2 flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">{f.deliveries} {f.deliveries === 1 ? "delivery" : "deliveries"}</span>
-                        <span className="font-semibold text-maziwa-green-deep">{fmtKsh(f.value)}</span>
+                        <span className="text-muted-foreground">
+                          {f.deliveries} {f.deliveries === 1 ? "delivery" : "deliveries"}
+                        </span>
+                        <span className="font-semibold text-maziwa-green-deep">
+                          {fmtKsh(f.value)}
+                        </span>
                       </div>
                     </li>
                   ))}
@@ -420,7 +499,9 @@ function DailySummary() {
                         <td className="pr-3 text-muted-foreground">{f.code}</td>
                         <td className="pr-3 text-right">{f.deliveries}</td>
                         <td className="pr-3 text-right font-bold">{f.kg.toFixed(1)}</td>
-                        <td className="text-right font-semibold text-maziwa-green-deep">{fmtKsh(f.value)}</td>
+                        <td className="text-right font-semibold text-maziwa-green-deep">
+                          {fmtKsh(f.value)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -435,11 +516,16 @@ function DailySummary() {
             <ShellCard>
               <ul className="space-y-2">
                 {activeRows.map((r) => (
-                  <li key={r.id} className="flex items-center justify-between gap-2 rounded-lg bg-muted/30 p-3 ring-1 ring-border/40">
+                  <li
+                    key={r.id}
+                    className="flex items-center justify-between gap-2 rounded-lg bg-muted/30 p-3 ring-1 ring-border/40"
+                  >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">
                         {r.farmers?.full_name ?? r.farmer_code}
-                        <span className="ml-1 text-xs font-normal text-muted-foreground">· {r.farmer_code}</span>
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">
+                          · {r.farmer_code}
+                        </span>
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {fmtTime(r.collected_at)} · {r.quality_grade}
@@ -447,7 +533,9 @@ function DailySummary() {
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
                       <span className="text-sm font-bold">{Number(r.quantity_kg)} kg</span>
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${STATUS_STYLE[r.status] ?? ""}`}>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-bold ${STATUS_STYLE[r.status] ?? ""}`}
+                      >
                         {r.status}
                       </span>
                     </div>

@@ -49,8 +49,15 @@ type Row = {
   quality_grade: string;
   status: string;
   collected_at: string;
-  price_per_ksh: number | null;
   farmers: { full_name: string } | null;
+};
+
+// Grade-based fallback pricing (price_per_ksh does not exist in the DB schema)
+const DEFAULT_PRICES: Record<string, number> = {
+  "Grade A": 55,
+  "Grade B": 45,
+  "Grade C": 35,
+  Rejected: 0,
 };
 
 type CollectionUpdate = {
@@ -152,7 +159,7 @@ function Collections() {
     supabase
       .from("collections")
       .select(
-        "id, farmer_code, quantity_kg, quality_grade, status, collected_at, price_per_ksh, farmers(full_name)",
+        "id, farmer_code, quantity_kg, quality_grade, status, collected_at, farmers(full_name)",
       )
       .order("collected_at", { ascending: false })
       .then(({ data }) => setRows((data as Row[] | null) ?? []));
@@ -197,7 +204,7 @@ function Collections() {
   );
   const totalKg = acceptedRows.reduce((a, r) => a + Number(r.quantity_kg), 0);
   const totalValue = acceptedRows.reduce(
-    (a, r) => a + Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0),
+    (a, r) => a + Number(r.quantity_kg) * (DEFAULT_PRICES[r.quality_grade] ?? 55),
     0,
   );
 
@@ -213,7 +220,7 @@ function Collections() {
       map[r.farmer_code] = entry;
       entry.kg += Number(r.quantity_kg);
       entry.deliveries += 1;
-      entry.value += Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0);
+      entry.value += Number(r.quantity_kg) * (DEFAULT_PRICES[r.quality_grade] ?? 55);
     });
     return Object.entries(map)
       .map(([code, v]) => ({ code, ...v }))
@@ -251,8 +258,8 @@ function Collections() {
       "Time",
     ];
     const lines = filtered.map((r) => {
-      const val =
-        r.status === "Accepted" ? Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0) : 0;
+      const unitPrice = DEFAULT_PRICES[r.quality_grade] ?? 55;
+      const val = r.status === "Accepted" ? Number(r.quantity_kg) * unitPrice : 0;
       const d = new Date(r.collected_at);
       return [
         r.farmer_code,
@@ -260,7 +267,7 @@ function Collections() {
         r.quantity_kg,
         r.quality_grade,
         r.status,
-        r.price_per_ksh ?? "",
+        unitPrice,
         val.toFixed(0),
         d.toLocaleDateString("en-KE"),
         d.toLocaleTimeString("en-KE"),
@@ -288,19 +295,21 @@ function Collections() {
     const win = window.open("", "_blank", "width=800,height=600");
     if (!win) return void toast.error("Pop-up blocked. Please allow pop-ups to print.");
     const rowsHtml = filtered
-      .map(
-        (r) => `
+      .map((r) => {
+        const unitPrice = DEFAULT_PRICES[r.quality_grade] ?? 55;
+        const rowValue = r.status === "Accepted" ? Number(r.quantity_kg) * unitPrice : 0;
+        return `
       <tr>
         <td>${escapeHtml(r.farmers?.full_name ?? r.farmer_code)}</td>
         <td>${escapeHtml(r.farmer_code)}</td>
         <td style="text-align:right">${Number(r.quantity_kg)} kg</td>
         <td>${escapeHtml(r.quality_grade)}</td>
-        <td>${r.price_per_ksh ? fmtKsh(Number(r.price_per_ksh)) : "—"}</td>
-        <td style="text-align:right">${r.status === "Accepted" ? fmtKsh(Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0)) : "—"}</td>
+        <td>${fmtKsh(unitPrice)}</td>
+        <td style="text-align:right">${r.status === "Accepted" ? fmtKsh(rowValue) : "—"}</td>
         <td>${fmtFullDate(r.collected_at)} ${fmtTime(r.collected_at)}</td>
         <td>${escapeHtml(r.status)}</td>
-      </tr>`,
-      )
+      </tr>`;
+      })
       .join("");
     win.document.write(`<!DOCTYPE html><html><head><title>Maziwaflow — Collection Statement</title>
       <style>
@@ -704,9 +713,9 @@ function Collections() {
                       {r.status}
                     </span>
                   </div>
-                  {r.status === "Accepted" && r.price_per_ksh && (
+                  {r.status === "Accepted" && (
                     <p className="mt-1 text-xs font-semibold text-maziwa-green-deep">
-                      {fmtKsh(Number(r.quantity_kg) * Number(r.price_per_ksh))}
+                      {fmtKsh(Number(r.quantity_kg) * (DEFAULT_PRICES[r.quality_grade] ?? 55))}
                     </p>
                   )}
                   {canEdit && r.status !== "Voided" && (
@@ -766,11 +775,11 @@ function Collections() {
                     <td className="pr-2 text-right font-bold">{Number(r.quantity_kg)} kg</td>
                     <td className="pr-2">{r.quality_grade}</td>
                     <td className="pr-2 text-right text-muted-foreground">
-                      {r.price_per_ksh ? fmtKsh(Number(r.price_per_ksh)) : "—"}
+                      {fmtKsh(DEFAULT_PRICES[r.quality_grade] ?? 55)}
                     </td>
                     <td className="pr-2 text-right font-semibold text-maziwa-green-deep">
-                      {r.status === "Accepted" && r.price_per_ksh
-                        ? fmtKsh(Number(r.quantity_kg) * Number(r.price_per_ksh))
+                      {r.status === "Accepted"
+                        ? fmtKsh(Number(r.quantity_kg) * (DEFAULT_PRICES[r.quality_grade] ?? 55))
                         : "—"}
                     </td>
                     <td className="pr-2 whitespace-nowrap">

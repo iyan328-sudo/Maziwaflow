@@ -44,8 +44,15 @@ type Collection = {
   quality_grade: string;
   status: string;
   collected_at: string;
-  price_per_ksh: number | null;
   farmers: { full_name: string } | null;
+};
+
+// Grade-based fallback pricing (price_per_ksh does not exist in the DB)
+const DEFAULT_PRICES: Record<string, number> = {
+  "Grade A": 55,
+  "Grade B": 45,
+  "Grade C": 35,
+  Rejected: 0,
 };
 
 const STATUS_STYLE: Record<string, string> = {
@@ -101,7 +108,7 @@ function DailySummary() {
     supabase
       .from("collections")
       .select(
-        "id, farmer_code, quantity_kg, quality_grade, status, collected_at, price_per_ksh, farmers(full_name)",
+        "id, farmer_code, quantity_kg, quality_grade, status, collected_at, farmers(full_name)",
       )
       .gte("collected_at", dayStart)
       .lte("collected_at", dayEnd)
@@ -118,7 +125,7 @@ function DailySummary() {
 
   const totalKg = acceptedRows.reduce((a, r) => a + Number(r.quantity_kg), 0);
   const totalValue = acceptedRows.reduce(
-    (a, r) => a + Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0),
+    (a, r) => a + Number(r.quantity_kg) * (DEFAULT_PRICES[r.quality_grade] ?? 55),
     0,
   );
   const totalDeliveries = activeRows.length;
@@ -134,7 +141,7 @@ function DailySummary() {
       map[r.quality_grade] = entry;
       entry.kg += Number(r.quantity_kg);
       entry.count += 1;
-      entry.value += Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0);
+      entry.value += Number(r.quantity_kg) * (DEFAULT_PRICES[r.quality_grade] ?? 55);
     });
     return Object.entries(map)
       .map(([grade, v]) => ({ grade, ...v }))
@@ -153,7 +160,7 @@ function DailySummary() {
       map[r.farmer_code] = entry;
       entry.kg += Number(r.quantity_kg);
       entry.deliveries += 1;
-      entry.value += Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0);
+      entry.value += Number(r.quantity_kg) * (DEFAULT_PRICES[r.quality_grade] ?? 55);
     });
     return Object.entries(map)
       .map(([code, v]) => ({ code, ...v }))
@@ -172,15 +179,15 @@ function DailySummary() {
       "Time",
     ];
     const lines = activeRows.map((r) => {
-      const val =
-        r.status === "Accepted" ? Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0) : 0;
+      const unitPrice = DEFAULT_PRICES[r.quality_grade] ?? 55;
+      const val = r.status === "Accepted" ? Number(r.quantity_kg) * unitPrice : 0;
       return [
         r.farmer_code,
         r.farmers?.full_name ?? "",
         r.quantity_kg,
         r.quality_grade,
         r.status,
-        r.price_per_ksh ?? "",
+        unitPrice,
         val.toFixed(0),
         fmtTime(r.collected_at),
       ]

@@ -1,20 +1,26 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Plus, Search, CalendarDays, TrendingUp, Users, Download, Printer, Pencil, Ban, History, X } from "lucide-react";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from "recharts";
+  Loader2,
+  Plus,
+  Search,
+  CalendarDays,
+  TrendingUp,
+  Users,
+  Download,
+  Printer,
+  Pencil,
+  Ban,
+  History,
+  X,
+} from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, ShellCard, fieldClass, labelClass } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { useRole } from "@/components/RoleViewContext";
+import { escapeHtml, toCsvCell } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/collections")({
   head: () => ({
@@ -43,8 +49,21 @@ type Row = {
   quality_grade: string;
   status: string;
   collected_at: string;
-  price_per_ksh: number | null;
   farmers: { full_name: string } | null;
+};
+
+// Grade-based fallback pricing (price_per_ksh does not exist in the DB schema)
+const DEFAULT_PRICES: Record<string, number> = {
+  "Grade A": 55,
+  "Grade B": 45,
+  "Grade C": 35,
+  Rejected: 0,
+};
+
+type CollectionUpdate = {
+  quantity_kg?: number;
+  quality_grade?: string;
+  status?: string;
 };
 
 type Correction = {
@@ -84,7 +103,8 @@ const fmtDate = (s: string) =>
   new Date(s).toLocaleDateString("en-KE", { day: "numeric", month: "short" });
 const fmtFullDate = (s: string) =>
   new Date(s).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" });
-const fmtKsh = (n: number) => `KSh ${Number(n).toLocaleString("en-KE", { minimumFractionDigits: 0 })}`;
+const fmtKsh = (n: number) =>
+  `KSh ${Number(n).toLocaleString("en-KE", { minimumFractionDigits: 0 })}`;
 
 function toISODate(d: Date): string {
   const y = d.getFullYear();
@@ -121,7 +141,12 @@ function Collections() {
   const [farmerFilter, setFarmerFilter] = useState("");
   const [farmersList, setFarmersList] = useState<{ farmer_code: string; full_name: string }[]>([]);
   const [editTarget, setEditTarget] = useState<Row | null>(null);
-  const [editForm, setEditForm] = useState({ quantity_kg: "", quality_grade: "", status: "", reason: "" });
+  const [editForm, setEditForm] = useState({
+    quantity_kg: "",
+    quality_grade: "",
+    status: "",
+    reason: "",
+  });
   const [voidTarget, setVoidTarget] = useState<Row | null>(null);
   const [voidReason, setVoidReason] = useState("");
   const [historyTarget, setHistoryTarget] = useState<Row | null>(null);
@@ -134,10 +159,10 @@ function Collections() {
     supabase
       .from("collections")
       .select(
-        "id, farmer_code, quantity_kg, quality_grade, status, collected_at, price_per_ksh, farmers(full_name)",
+        "id, farmer_code, quantity_kg, quality_grade, status, collected_at, farmers(full_name)",
       )
       .order("collected_at", { ascending: false })
-      .then(({ data }) => setRows((data as Row[]) ?? []));
+      .then(({ data }) => setRows((data as Row[] | null) ?? []));
   }, []);
 
   useEffect(() => {
@@ -160,7 +185,11 @@ function Collections() {
     const startTs = dateRange.start ? new Date(dateRange.start + "T00:00:00").getTime() : 0;
     const endTs = dateRange.end ? new Date(dateRange.end + "T23:59:59").getTime() : Infinity;
     return (rows ?? []).filter((r) => {
-      if (s && !r.farmer_code.toLowerCase().includes(s) && !r.farmers?.full_name.toLowerCase().includes(s))
+      if (
+        s &&
+        !r.farmer_code.toLowerCase().includes(s) &&
+        !r.farmers?.full_name.toLowerCase().includes(s)
+      )
         return false;
       if (farmerFilter && r.farmer_code !== farmerFilter) return false;
       const ts = new Date(r.collected_at).getTime();
@@ -169,22 +198,29 @@ function Collections() {
     });
   }, [rows, q, farmerFilter, dateRange]);
 
-  const acceptedRows = filtered.filter((r) => r.status === "Accepted");
+  const acceptedRows = useMemo(
+    () => filtered.filter((r) => r.status === "Accepted"),
+    [filtered],
+  );
   const totalKg = acceptedRows.reduce((a, r) => a + Number(r.quantity_kg), 0);
   const totalValue = acceptedRows.reduce(
-    (a, r) => a + Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0),
+    (a, r) => a + Number(r.quantity_kg) * (DEFAULT_PRICES[r.quality_grade] ?? 55),
     0,
   );
 
   const farmerSummary = useMemo(() => {
     const map: Record<string, { name: string; kg: number; deliveries: number; value: number }> = {};
     acceptedRows.forEach((r) => {
-      if (!map[r.farmer_code]) {
-        map[r.farmer_code] = { name: r.farmers?.full_name ?? r.farmer_code, kg: 0, deliveries: 0, value: 0 };
-      }
-      map[r.farmer_code].kg += Number(r.quantity_kg);
-      map[r.farmer_code].deliveries += 1;
-      map[r.farmer_code].value += Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0);
+      const entry = map[r.farmer_code] ?? {
+        name: r.farmers?.full_name ?? r.farmer_code,
+        kg: 0,
+        deliveries: 0,
+        value: 0,
+      };
+      map[r.farmer_code] = entry;
+      entry.kg += Number(r.quantity_kg);
+      entry.deliveries += 1;
+      entry.value += Number(r.quantity_kg) * (DEFAULT_PRICES[r.quality_grade] ?? 55);
     });
     return Object.entries(map)
       .map(([code, v]) => ({ code, ...v }))
@@ -201,15 +237,29 @@ function Collections() {
       .sort(([a], [b]) => a.localeCompare(b))
       .slice(-14)
       .map(([day, kg]) => ({
-        day: new Date(day + "T00:00:00").toLocaleDateString("en-KE", { day: "numeric", month: "short" }),
+        day: new Date(day + "T00:00:00").toLocaleDateString("en-KE", {
+          day: "numeric",
+          month: "short",
+        }),
         kg,
       }));
   }, [acceptedRows]);
 
   function exportCsv() {
-    const headers = ["Farmer Code", "Farmer Name", "Quantity (kg)", "Grade", "Status", "Price/kg", "Value (KSh)", "Date", "Time"];
+    const headers = [
+      "Farmer Code",
+      "Farmer Name",
+      "Quantity (kg)",
+      "Grade",
+      "Status",
+      "Price/kg",
+      "Value (KSh)",
+      "Date",
+      "Time",
+    ];
     const lines = filtered.map((r) => {
-      const val = r.status === "Accepted" ? Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0) : 0;
+      const unitPrice = DEFAULT_PRICES[r.quality_grade] ?? 55;
+      const val = r.status === "Accepted" ? Number(r.quantity_kg) * unitPrice : 0;
       const d = new Date(r.collected_at);
       return [
         r.farmer_code,
@@ -217,11 +267,13 @@ function Collections() {
         r.quantity_kg,
         r.quality_grade,
         r.status,
-        r.price_per_ksh ?? "",
+        unitPrice,
         val.toFixed(0),
         d.toLocaleDateString("en-KE"),
         d.toLocaleTimeString("en-KE"),
-      ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",");
+      ]
+        .map(toCsvCell)
+        .join(",");
     });
     const csv = [headers.join(","), ...lines].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -235,24 +287,30 @@ function Collections() {
 
   function printStatement() {
     const farmerName = farmerFilter
-      ? farmersList.find((f) => f.farmer_code === farmerFilter)?.full_name ?? farmerFilter
+      ? (farmersList.find((f) => f.farmer_code === farmerFilter)?.full_name ?? farmerFilter)
       : "All Farmers";
     const periodLabel = dateRange.start
       ? `${fmtFullDate(dateRange.start + "T00:00:00")} — ${fmtFullDate(dateRange.end + "T23:59:59")}`
       : "All Time";
     const win = window.open("", "_blank", "width=800,height=600");
     if (!win) return void toast.error("Pop-up blocked. Please allow pop-ups to print.");
-    const rowsHtml = filtered.map((r) => `
+    const rowsHtml = filtered
+      .map((r) => {
+        const unitPrice = DEFAULT_PRICES[r.quality_grade] ?? 55;
+        const rowValue = r.status === "Accepted" ? Number(r.quantity_kg) * unitPrice : 0;
+        return `
       <tr>
-        <td>${r.farmers?.full_name ?? r.farmer_code}</td>
-        <td>${r.farmer_code}</td>
+        <td>${escapeHtml(r.farmers?.full_name ?? r.farmer_code)}</td>
+        <td>${escapeHtml(r.farmer_code)}</td>
         <td style="text-align:right">${Number(r.quantity_kg)} kg</td>
-        <td>${r.quality_grade}</td>
-        <td>${r.price_per_ksh ? fmtKsh(Number(r.price_per_ksh)) : "—"}</td>
-        <td style="text-align:right">${r.status === "Accepted" ? fmtKsh(Number(r.quantity_kg) * Number(r.price_per_ksh ?? 0)) : "—"}</td>
+        <td>${escapeHtml(r.quality_grade)}</td>
+        <td>${fmtKsh(unitPrice)}</td>
+        <td style="text-align:right">${r.status === "Accepted" ? fmtKsh(rowValue) : "—"}</td>
         <td>${fmtFullDate(r.collected_at)} ${fmtTime(r.collected_at)}</td>
-        <td>${r.status}</td>
-      </tr>`).join("");
+        <td>${escapeHtml(r.status)}</td>
+      </tr>`;
+      })
+      .join("");
     win.document.write(`<!DOCTYPE html><html><head><title>Maziwaflow — Collection Statement</title>
       <style>
         body{font-family:system-ui,sans-serif;margin:32px;color:#1a1a1a}
@@ -273,8 +331,8 @@ function Collections() {
       <h1>Maziwaflow Mobile</h1>
       <h2>Collection Statement</h2>
       <div class="meta">
-        <div><strong>Farmer</strong>${farmerName}</div>
-        <div><strong>Period</strong>${periodLabel}</div>
+        <div><strong>Farmer</strong>${escapeHtml(farmerName)}</div>
+        <div><strong>Period</strong>${escapeHtml(periodLabel)}</div>
         <div><strong>Generated</strong>${new Date().toLocaleString("en-KE")}</div>
       </div>
       <div class="summary">
@@ -308,7 +366,7 @@ function Collections() {
     if (!editTarget) return;
     if (!editForm.reason.trim()) return void toast.error("A reason is required for corrections.");
     setBusy(true);
-    const updates: Record<string, unknown> = {};
+    const updates: CollectionUpdate = {};
     const correctionsToInsert: { field_name: string; old_value: string; new_value: string }[] = [];
 
     const newQty = Number(editForm.quantity_kg);
@@ -403,7 +461,8 @@ function Collections() {
     });
 
     setBusy(false);
-    if (corrError) return void toast.error("Collection voided but audit trail failed: " + corrError.message);
+    if (corrError)
+      return void toast.error("Collection voided but audit trail failed: " + corrError.message);
     toast.success("Collection voided");
     setVoidTarget(null);
     setVoidReason("");
@@ -415,7 +474,9 @@ function Collections() {
     setCorrections(null);
     const { data } = await supabase
       .from("collection_corrections")
-      .select("id, field_name, old_value, new_value, reason, corrected_by, created_at, profiles(full_name)")
+      .select(
+        "id, field_name, old_value, new_value, reason, corrected_by, created_at, profiles(full_name)",
+      )
       .eq("collection_id", r.id)
       .order("created_at", { ascending: false });
     setCorrections((data as Correction[]) ?? []);
@@ -437,7 +498,9 @@ function Collections() {
             <CalendarDays className="size-4 text-maziwa-blue" />
             <p className="text-xs font-bold text-muted-foreground uppercase">Accepted Vol</p>
           </div>
-          <p className="mt-1 text-2xl font-extrabold">{totalKg.toFixed(1)} <span className="text-sm">kg</span></p>
+          <p className="mt-1 text-2xl font-extrabold">
+            {totalKg.toFixed(1)} <span className="text-sm">kg</span>
+          </p>
         </div>
         <div className="rounded-lg bg-card p-4 ring-1 ring-border">
           <div className="flex items-center gap-2">
@@ -470,7 +533,9 @@ function Collections() {
         {preset === "custom" && (
           <div className="mb-4 grid grid-cols-2 gap-3 sm:max-w-md">
             <div>
-              <label className={labelClass} htmlFor="from_date">From</label>
+              <label className={labelClass} htmlFor="from_date">
+                From
+              </label>
               <input
                 id="from_date"
                 type="date"
@@ -480,7 +545,9 @@ function Collections() {
               />
             </div>
             <div>
-              <label className={labelClass} htmlFor="to_date">To</label>
+              <label className={labelClass} htmlFor="to_date">
+                To
+              </label>
               <input
                 id="to_date"
                 type="date"
@@ -596,7 +663,9 @@ function Collections() {
                       </td>
                       <td className="pr-3 text-right">{f.deliveries}</td>
                       <td className="pr-3 text-right font-bold">{f.kg.toFixed(1)}</td>
-                      <td className="pr-3 text-right font-semibold text-maziwa-green-deep">{fmtKsh(f.value)}</td>
+                      <td className="pr-3 text-right font-semibold text-maziwa-green-deep">
+                        {fmtKsh(f.value)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -619,7 +688,10 @@ function Collections() {
             {/* Mobile cards */}
             <ul className="space-y-2.5 sm:hidden">
               {filtered.map((r) => (
-                <li key={r.id} className={`rounded-lg bg-muted/50 p-3.5 ring-1 ring-border/60 ${r.status === "Voided" ? "opacity-50" : ""}`}>
+                <li
+                  key={r.id}
+                  className={`rounded-lg bg-muted/50 p-3.5 ring-1 ring-border/60 ${r.status === "Voided" ? "opacity-50" : ""}`}
+                >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate font-bold">{r.farmers?.full_name}</p>
@@ -641,20 +713,35 @@ function Collections() {
                       {r.status}
                     </span>
                   </div>
-                  {r.status === "Accepted" && r.price_per_ksh && (
+                  {r.status === "Accepted" && (
                     <p className="mt-1 text-xs font-semibold text-maziwa-green-deep">
-                      {fmtKsh(Number(r.quantity_kg) * Number(r.price_per_ksh))}
+                      {fmtKsh(Number(r.quantity_kg) * (DEFAULT_PRICES[r.quality_grade] ?? 55))}
                     </p>
                   )}
                   {canEdit && r.status !== "Voided" && (
                     <div className="mt-2 flex gap-2">
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openEdit(r)}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => openEdit(r)}
+                      >
                         <Pencil className="size-3" /> Edit
                       </Button>
-                      <Button size="sm" variant="outline" className="h-7 text-xs text-destructive" onClick={() => setVoidTarget(r)}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs text-destructive"
+                        onClick={() => setVoidTarget(r)}
+                      >
                         <Ban className="size-3" /> Void
                       </Button>
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openHistory(r)}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => openHistory(r)}
+                      >
                         <History className="size-3" /> Audit
                       </Button>
                     </div>
@@ -679,17 +766,20 @@ function Collections() {
               </thead>
               <tbody>
                 {filtered.map((r) => (
-                  <tr key={r.id} className={`border-b border-border/60 last:border-0 ${r.status === "Voided" ? "opacity-50" : ""}`}>
+                  <tr
+                    key={r.id}
+                    className={`border-b border-border/60 last:border-0 ${r.status === "Voided" ? "opacity-50" : ""}`}
+                  >
                     <td className="py-3 pr-2 font-semibold">{r.farmers?.full_name}</td>
                     <td className="pr-2 text-muted-foreground">{r.farmer_code}</td>
                     <td className="pr-2 text-right font-bold">{Number(r.quantity_kg)} kg</td>
                     <td className="pr-2">{r.quality_grade}</td>
                     <td className="pr-2 text-right text-muted-foreground">
-                      {r.price_per_ksh ? fmtKsh(Number(r.price_per_ksh)) : "—"}
+                      {fmtKsh(DEFAULT_PRICES[r.quality_grade] ?? 55)}
                     </td>
                     <td className="pr-2 text-right font-semibold text-maziwa-green-deep">
-                      {r.status === "Accepted" && r.price_per_ksh
-                        ? fmtKsh(Number(r.quantity_kg) * Number(r.price_per_ksh))
+                      {r.status === "Accepted"
+                        ? fmtKsh(Number(r.quantity_kg) * (DEFAULT_PRICES[r.quality_grade] ?? 55))
                         : "—"}
                     </td>
                     <td className="pr-2 whitespace-nowrap">
@@ -743,54 +833,96 @@ function Collections() {
 
       {/* Edit modal */}
       {editTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setEditTarget(null)}>
-          <div className="w-full max-w-md rounded-lg bg-card p-6 shadow-xl ring-1 ring-border" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setEditTarget(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-lg bg-card p-6 shadow-xl ring-1 ring-border"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Pencil className="size-5 text-maziwa-blue" />
                 <h2 className="font-bold">Correct Collection</h2>
               </div>
-              <button onClick={() => setEditTarget(null)} className="text-muted-foreground hover:text-foreground"><X className="size-5" /></button>
+              <button
+                onClick={() => setEditTarget(null)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-5" />
+              </button>
             </div>
             <p className="mb-4 text-sm text-muted-foreground">
-              {editTarget.farmers?.full_name} · {fmtFullDate(editTarget.collected_at)} · {Number(editTarget.quantity_kg)} kg · {editTarget.quality_grade}
+              {editTarget.farmers?.full_name} · {fmtFullDate(editTarget.collected_at)} ·{" "}
+              {Number(editTarget.quantity_kg)} kg · {editTarget.quality_grade}
             </p>
             <form onSubmit={saveEdit} className="space-y-4">
               <div>
-                <label className={labelClass} htmlFor="edit_qty">Quantity (kg)</label>
-                <input id="edit_qty" type="number" step="0.1" className={fieldClass}
+                <label className={labelClass} htmlFor="edit_qty">
+                  Quantity (kg)
+                </label>
+                <input
+                  id="edit_qty"
+                  type="number"
+                  step="0.1"
+                  className={fieldClass}
                   value={editForm.quantity_kg}
                   onChange={(e) => setEditForm((s) => ({ ...s, quantity_kg: e.target.value }))}
                 />
               </div>
               <div>
-                <label className={labelClass} htmlFor="edit_grade">Quality Grade</label>
-                <select id="edit_grade" className={fieldClass}
+                <label className={labelClass} htmlFor="edit_grade">
+                  Quality Grade
+                </label>
+                <select
+                  id="edit_grade"
+                  className={fieldClass}
                   value={editForm.quality_grade}
                   onChange={(e) => setEditForm((s) => ({ ...s, quality_grade: e.target.value }))}
                 >
-                  {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+                  {GRADES.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
-                <label className={labelClass} htmlFor="edit_status">Status</label>
-                <select id="edit_status" className={fieldClass}
+                <label className={labelClass} htmlFor="edit_status">
+                  Status
+                </label>
+                <select
+                  id="edit_status"
+                  className={fieldClass}
                   value={editForm.status}
                   onChange={(e) => setEditForm((s) => ({ ...s, status: e.target.value }))}
                 >
-                  {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
-                <label className={labelClass} htmlFor="edit_reason">Reason for correction <span className="text-destructive">*</span></label>
-                <textarea id="edit_reason" rows={3} className={fieldClass}
+                <label className={labelClass} htmlFor="edit_reason">
+                  Reason for correction <span className="text-destructive">*</span>
+                </label>
+                <textarea
+                  id="edit_reason"
+                  rows={3}
+                  className={fieldClass}
                   placeholder="Explain why this correction is being made (required for audit trail)"
                   value={editForm.reason}
                   onChange={(e) => setEditForm((s) => ({ ...s, reason: e.target.value }))}
                 />
               </div>
-              <Button type="submit" disabled={busy}
-                className="pill-action h-auto justify-center bg-maziwa-blue hover:bg-maziwa-blue/90 disabled:opacity-60">
+              <Button
+                type="submit"
+                disabled={busy}
+                className="pill-action h-auto justify-center bg-maziwa-blue hover:bg-maziwa-blue/90 disabled:opacity-60"
+              >
                 {busy && <Loader2 className="size-4 animate-spin" />} Save Correction
               </Button>
             </form>
@@ -800,32 +932,53 @@ function Collections() {
 
       {/* Void confirm modal */}
       {voidTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setVoidTarget(null)}>
-          <div className="w-full max-w-md rounded-lg bg-card p-6 shadow-xl ring-1 ring-border" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setVoidTarget(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-lg bg-card p-6 shadow-xl ring-1 ring-border"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Ban className="size-5 text-destructive" />
                 <h2 className="font-bold">Void Collection</h2>
               </div>
-              <button onClick={() => setVoidTarget(null)} className="text-muted-foreground hover:text-foreground"><X className="size-5" /></button>
+              <button
+                onClick={() => setVoidTarget(null)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-5" />
+              </button>
             </div>
             <p className="mb-4 text-sm text-muted-foreground">
-              {voidTarget.farmers?.full_name} · {fmtFullDate(voidTarget.collected_at)} · {Number(voidTarget.quantity_kg)} kg · {voidTarget.status}
+              {voidTarget.farmers?.full_name} · {fmtFullDate(voidTarget.collected_at)} ·{" "}
+              {Number(voidTarget.quantity_kg)} kg · {voidTarget.status}
             </p>
             <p className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              Voiding marks this collection as cancelled. It will be excluded from earnings and payment calculations. The original values are preserved in the audit trail.
+              Voiding marks this collection as cancelled. It will be excluded from earnings and
+              payment calculations. The original values are preserved in the audit trail.
             </p>
             <form onSubmit={voidCollection} className="space-y-4">
               <div>
-                <label className={labelClass} htmlFor="void_reason">Reason for voiding <span className="text-destructive">*</span></label>
-                <textarea id="void_reason" rows={3} className={fieldClass}
+                <label className={labelClass} htmlFor="void_reason">
+                  Reason for voiding <span className="text-destructive">*</span>
+                </label>
+                <textarea
+                  id="void_reason"
+                  rows={3}
+                  className={fieldClass}
                   placeholder="Explain why this collection is being voided (required for audit trail)"
                   value={voidReason}
                   onChange={(e) => setVoidReason(e.target.value)}
                 />
               </div>
-              <Button type="submit" disabled={busy}
-                className="pill-action h-auto justify-center bg-destructive hover:bg-destructive/90 disabled:opacity-60">
+              <Button
+                type="submit"
+                disabled={busy}
+                className="pill-action h-auto justify-center bg-destructive hover:bg-destructive/90 disabled:opacity-60"
+              >
                 {busy && <Loader2 className="size-4 animate-spin" />} Void Collection
               </Button>
             </form>
@@ -835,38 +988,62 @@ function Collections() {
 
       {/* Audit history modal */}
       {historyTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setHistoryTarget(null)}>
-          <div className="w-full max-w-lg rounded-lg bg-card p-6 shadow-xl ring-1 ring-border" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setHistoryTarget(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-lg bg-card p-6 shadow-xl ring-1 ring-border"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <History className="size-5 text-maziwa-purple" />
                 <h2 className="font-bold">Correction History</h2>
               </div>
-              <button onClick={() => setHistoryTarget(null)} className="text-muted-foreground hover:text-foreground"><X className="size-5" /></button>
+              <button
+                onClick={() => setHistoryTarget(null)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-5" />
+              </button>
             </div>
             <p className="mb-4 text-sm text-muted-foreground">
-              {historyTarget.farmers?.full_name} · {historyTarget.farmer_code} · {fmtFullDate(historyTarget.collected_at)}
+              {historyTarget.farmers?.full_name} · {historyTarget.farmer_code} ·{" "}
+              {fmtFullDate(historyTarget.collected_at)}
             </p>
             {corrections === null ? (
-              <div className="flex justify-center py-8"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>
+              <div className="flex justify-center py-8">
+                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+              </div>
             ) : corrections.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">No corrections have been made to this collection.</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No corrections have been made to this collection.
+              </p>
             ) : (
               <ul className="space-y-3 max-h-80 overflow-y-auto">
                 {corrections.map((c) => (
                   <li key={c.id} className="rounded-lg bg-muted/40 p-3 ring-1 ring-border/60">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-maziwa-purple">{c.field_name.replace(/_/g, " ")}</span>
-                      <span className="text-muted-foreground">{fmtFullDate(c.created_at)} {fmtTime(c.created_at)}</span>
+                      <span className="font-bold text-maziwa-purple">
+                        {c.field_name.replace(/_/g, " ")}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {fmtFullDate(c.created_at)} {fmtTime(c.created_at)}
+                      </span>
                     </div>
                     <p className="mt-1 text-sm">
-                      <span className="text-muted-foreground line-through">{c.old_value ?? "—"}</span>
+                      <span className="text-muted-foreground line-through">
+                        {c.old_value ?? "—"}
+                      </span>
                       {" → "}
                       <span className="font-semibold">{c.new_value ?? "—"}</span>
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">Reason: {c.reason}</p>
                     {c.profiles?.full_name && (
-                      <p className="mt-0.5 text-xs text-muted-foreground">By: {c.profiles.full_name}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        By: {c.profiles.full_name}
+                      </p>
                     )}
                   </li>
                 ))}
@@ -881,7 +1058,17 @@ function Collections() {
 
 function BarChartIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-maziwa-blue">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-maziwa-blue"
+    >
       <line x1="12" y1="20" x2="12" y2="10" />
       <line x1="18" y1="20" x2="18" y2="4" />
       <line x1="6" y1="20" x2="6" y2="16" />

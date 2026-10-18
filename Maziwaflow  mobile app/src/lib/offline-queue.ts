@@ -188,7 +188,6 @@ export type SyncPayload = {
   quantity_kg: number;
   quality_grade: string;
   status: string;
-  price_per_ksh?: number | null;
   collected_at: string;
   received_by: string;
 };
@@ -349,9 +348,8 @@ export function syncAllPending(
       quantity_kg: p.quantity_kg,
       quality_grade: p.quality_grade,
       status: p.status,
-      price_per_ksh: null,
       collected_at: p.collected_at,
-      received_by: p.received_by,
+      received_by: p.received_by ?? "",
     });
 
     const collectionResults = await syncPendingCollectionsNow(buildInsert || defaultBuildInsert);
