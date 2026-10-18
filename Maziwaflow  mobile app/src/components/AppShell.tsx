@@ -75,37 +75,37 @@ const SIDEBAR_ITEMS: NavItem[] = [
     label: "Dashboard",
     to: "/dashboard",
     icon: LayoutDashboard,
-    roles: ["admin", "clerk", "farmer"],
+    roles: ["admin"],
   },
   {
     label: "Farmers",
     to: "/farmers",
     icon: Users,
-    roles: ["admin", "clerk"],
+    roles: ["admin"],
   },
   {
     label: "Collection",
     to: "/receive-milk",
     icon: Milk,
-    roles: ["admin", "clerk"],
+    roles: ["admin"],
   },
   {
     label: "Payments",
     to: "/payments",
     icon: CreditCard,
-    roles: ["admin", "farmer"],
+    roles: ["admin"],
   },
   {
     label: "Routes",
     to: "/collections",
     icon: MapPin,
-    roles: ["admin", "clerk", "farmer"],
+    roles: ["admin"],
   },
   {
     label: "Reports",
     to: "/daily-summary",
     icon: BarChart3,
-    roles: ["admin", "clerk"],
+    roles: ["admin"],
   },
   {
     label: "Settings",
@@ -117,15 +117,9 @@ const SIDEBAR_ITEMS: NavItem[] = [
     label: "Support",
     to: "/enquiries",
     icon: HelpCircle,
-    roles: ["admin", "clerk", "farmer"],
+    roles: ["admin"],
   },
 ];
-
-const ROLE_LABELS: Record<Role, string> = {
-  admin: "Admin",
-  clerk: "Clerk",
-  farmer: "Farmer",
-};
 
 export function AppShell({
   title,
@@ -154,7 +148,6 @@ export function AppShell({
     id: string;
     name: string;
     email: string;
-    centre: string;
   } | null>(null);
 
   const context = (
@@ -172,23 +165,21 @@ export function AppShell({
         const u = data.user;
         supabase
           .from("profiles")
-          .select("full_name, collection_centre")
+          .select("full_name")
           .eq("id", u.id)
           .maybeSingle()
           .then(({ data: p }) => {
             setProfile({
               id: u.id,
               email: u.email || "",
-              name: p?.full_name || u.email?.split("@")[0] || "Ian koskel",
-              centre: p?.collection_centre || "Eldoret Hub",
+              name: p?.full_name || u.email?.split("@")[0] || "User",
             });
           })
           .catch(() => {
             setProfile({
               id: u.id,
               email: u.email || "",
-              name: u.email?.split("@")[0] || "Ian koskel",
-              centre: "Eldoret Hub",
+              name: u.email?.split("@")[0] || "User",
             });
           });
       }
@@ -224,13 +215,90 @@ export function AppShell({
 
   const safeRole: Role =
     role === "clerk" || role === "farmer" || role === "admin" ? role : "admin";
-  const roleLabel = ROLE_LABELS[safeRole] || "Admin";
-  const centreLabel = profile?.centre || "Eldoret Hub";
-  const visibleNavItems = SIDEBAR_ITEMS.filter((item) =>
-    item.roles.includes(safeRole)
-  );
 
-  // Common dark sidebar content component used on both Desktop fixed sidebar and Mobile Drawer
+  // =========================================================================
+  // CLERK & FARMER LAYOUT: Retain 100% Original, Unchanged UI Layout
+  // =========================================================================
+  if (safeRole !== "admin") {
+    return (
+      <div className="min-h-dvh bg-slate-50/60 dark:bg-background text-foreground antialiased flex flex-col">
+        {/* Original Top Header */}
+        <header className="sticky top-0 z-20 bg-maziwa-blue text-white shadow-lg shadow-maziwa-blue/30">
+          <div className="mx-auto flex min-h-16 w-full max-w-md items-center gap-3 px-4 py-2.5 sm:px-5">
+            {back ? (
+              <Button
+                asChild
+                variant="ghost"
+                size="icon"
+                className="size-9 shrink-0 rounded-full bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25 hover:text-primary-foreground"
+              >
+                <Link to="/dashboard" aria-label="Back to dashboard">
+                  <ArrowLeft className="size-4.5" />
+                </Link>
+              </Button>
+            ) : (
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/15">
+                <Droplets className="size-4.5" aria-hidden="true" />
+              </span>
+            )}
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-base leading-tight font-extrabold">{title}</h1>
+              <p className="truncate text-[11px] font-medium text-white/70">
+                {subtitle ?? "Maziwaflow Mobile"}
+              </p>
+            </div>
+            {effectiveUserId && <NotificationBell userId={effectiveUserId} />}
+            <SyncMenu />
+          </div>
+        </header>
+
+        {/* Original Centered Canvas */}
+        <main className="mx-auto w-full max-w-md flex-1 px-4 pt-5 pb-24 sm:px-5 sm:pt-6">
+          {children}
+        </main>
+
+        {/* Quick Help Dialog */}
+        <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Droplets className="size-5 text-maziwa-blue" />
+                Quick Help & Guide
+              </DialogTitle>
+              <DialogDescription>
+                Everything you need to navigate MaziwaFlow effectively.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3.5 text-xs text-muted-foreground pt-2">
+              <div className="rounded-lg bg-muted/40 p-3 ring-1 ring-border/40">
+                <strong className="text-foreground block mb-0.5">Offline-First Delivery</strong>
+                Collections and farmer registrations entered during network loss are securely
+                stored on your device and sync automatically upon reconnection.
+              </div>
+              <div className="rounded-lg bg-muted/40 p-3 ring-1 ring-border/40">
+                <strong className="text-foreground block mb-0.5">Clerk Earnings</strong>
+                Field clerks earn a flat commission per liter configured by administrators.
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Mobile Floating Action Button (FAB) for Help */}
+        <Button
+          type="button"
+          aria-label="Help"
+          onClick={() => setHelpOpen(true)}
+          className="fab-help fixed right-5 bottom-5 z-30 shadow-lg"
+        >
+          ?
+        </Button>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // ADMIN ROLE: Updated Left-Sidebar Desktop Layout & Command Center View
+  // =========================================================================
   const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => (
     <div className="flex flex-col h-full bg-[#0c1524] text-white select-none">
       {/* Brand Header */}
@@ -258,7 +326,7 @@ export function AppShell({
               Maziwaflow Mobile
             </p>
             <p className="text-xs text-slate-400 font-medium truncate">
-              Karibu, {profile?.name || "Ian koskel"}
+              Karibu, {profile?.name || "Administrator"}
             </p>
           </div>
         </div>
@@ -302,7 +370,7 @@ export function AppShell({
       {/* Navigation Links */}
       <div className="flex-1 overflow-y-auto px-4 py-5 space-y-1.5">
         <nav className="space-y-1.5">
-          {visibleNavItems.map((item) => {
+          {SIDEBAR_ITEMS.map((item) => {
             const isActive = currentPath === item.to;
             const Icon = item.icon;
             return (
@@ -355,7 +423,7 @@ export function AppShell({
         </button>
 
         <p className="pt-2 text-center text-[10px] text-slate-500 font-medium">
-          MaziwaFlow · Eldoret Hub
+          MaziwaFlow · Dairy Operations Cloud
         </p>
       </div>
     </div>
@@ -363,13 +431,10 @@ export function AppShell({
 
   return (
     <div className="min-h-dvh bg-[#f4f6fa] dark:bg-background text-foreground antialiased flex flex-col lg:flex-row">
-      {/* =========================================================================
-          1. MOBILE TOP HEADER (< lg viewports)
-          ========================================================================= */}
+      {/* Mobile Top Header for Admin (< lg viewports) */}
       <header className="sticky top-0 z-20 bg-maziwa-blue text-white shadow-md lg:hidden">
         <div className="mx-auto flex min-h-16 w-full items-center justify-between gap-3 px-4 py-2.5 sm:px-5">
           <div className="flex items-center gap-2.5">
-            {/* Mobile Drawer Trigger */}
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
               <SheetTrigger asChild>
                 <Button
@@ -414,24 +479,18 @@ export function AppShell({
         </div>
       </header>
 
-      {/* =========================================================================
-          2. GORGEOUS LEFT-SIDE DESKTOP SIDEBAR (Fixed left on lg+ viewports)
-          ========================================================================= */}
+      {/* Desktop Left-Side Sidebar (Fixed left on lg+ viewports) */}
       <aside className="hidden lg:block lg:fixed lg:left-0 lg:top-0 lg:bottom-0 lg:w-64 xl:w-72 lg:z-30 border-r border-[#19273c] shadow-2xl">
         <SidebarContent />
       </aside>
 
-      {/* =========================================================================
-          3. MAIN CONTENT CANVAS (Shifted right by sidebar width on desktop)
-          ========================================================================= */}
+      {/* Main Content Area */}
       <div className="flex-1 min-h-dvh flex flex-col lg:ml-64 xl:ml-72 transition-all">
-        {/* Desktop Top Bar (lg+ viewports matching screenshot) */}
+        {/* Desktop Top Bar */}
         <header className="hidden lg:flex items-center justify-between px-8 py-3.5 border-b border-border/60 bg-background/90 backdrop-blur-md sticky top-0 z-20">
-          {/* Left: Hamburger & Search Input */}
           <div className="flex items-center gap-4 flex-1 max-w-xl">
             <button
               type="button"
-              onClick={() => {}}
               className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted/60 transition"
               aria-label="Navigation"
             >
@@ -448,9 +507,7 @@ export function AppShell({
             </div>
           </div>
 
-          {/* Right: Live Connection, Notification Bell, User Dropdown */}
           <div className="flex items-center gap-4">
-            {/* Live Network Status Indicator */}
             <div className="flex items-center gap-2 rounded-full px-3 py-1 bg-muted/60 text-xs font-semibold ring-1 ring-border/50">
               <span
                 className={`size-2 rounded-full ${
@@ -470,7 +527,7 @@ export function AppShell({
 
             <SyncMenu />
 
-            {/* User Dropdown matching 'Admin - Eldoret Hub v' in screenshot */}
+            {/* Admin Profile Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -481,7 +538,7 @@ export function AppShell({
                     <UserIcon className="size-4" />
                   </div>
                   <span className="text-xs font-bold text-foreground">
-                    {roleLabel} - {centreLabel}
+                    Administrator
                   </span>
                   <ChevronDown className="size-3.5 text-muted-foreground" />
                 </button>
@@ -490,13 +547,13 @@ export function AppShell({
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-bold text-foreground">
-                      {profile?.name || "Ian koskel"}
+                      {profile?.name || "Administrator"}
                     </p>
                     <p className="text-xs text-muted-foreground truncate">
                       {profile?.email || "signed in"}
                     </p>
                     <span className="inline-block mt-1 w-fit rounded bg-blue-100 dark:bg-blue-950/80 px-2 py-0.5 text-[10px] font-extrabold text-blue-700 dark:text-blue-300">
-                      {roleLabel} · {centreLabel}
+                      Administrator
                     </span>
                   </div>
                 </DropdownMenuLabel>
@@ -507,28 +564,24 @@ export function AppShell({
                     <span>Change Password</span>
                   </Link>
                 </DropdownMenuItem>
-                {safeRole === "admin" && (
-                  <>
-                    <DropdownMenuItem asChild>
-                      <Link to="/admin-dashboard" className="cursor-pointer">
-                        <BarChart3 className="mr-2 size-4" />
-                        <span>Admin Overview</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link to="/milk-prices" className="cursor-pointer">
-                        <TrendingUp className="mr-2 size-4" />
-                        <span>Milk Pricing & Rates</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link to="/staff" className="cursor-pointer">
-                        <ShieldCheck className="mr-2 size-4" />
-                        <span>Staff Accounts</span>
-                      </Link>
-                    </DropdownMenuItem>
-                  </>
-                )}
+                <DropdownMenuItem asChild>
+                  <Link to="/admin-dashboard" className="cursor-pointer">
+                    <BarChart3 className="mr-2 size-4" />
+                    <span>Admin Overview</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/milk-prices" className="cursor-pointer">
+                    <TrendingUp className="mr-2 size-4" />
+                    <span>Milk Pricing & Rates</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/staff" className="cursor-pointer">
+                    <ShieldCheck className="mr-2 size-4" />
+                    <span>Staff Accounts</span>
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => setHelpOpen(true)}
                   className="cursor-pointer"
@@ -559,9 +612,7 @@ export function AppShell({
         </main>
       </div>
 
-      {/* =========================================================================
-          4. QUICK HELP DIALOG
-          ========================================================================= */}
+      {/* Quick Help Dialog */}
       <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -577,22 +628,12 @@ export function AppShell({
             <div className="rounded-lg bg-muted/40 p-3 ring-1 ring-border/40">
               <strong className="text-foreground block mb-0.5">Desktop Navigation</strong>
               Use the fixed left-side navigation on desktop or the hamburger drawer on mobile
-              to access all operations tailored to your permissions.
+              to access all operations.
             </div>
             <div className="rounded-lg bg-muted/40 p-3 ring-1 ring-border/40">
               <strong className="text-foreground block mb-0.5">Offline-First Delivery</strong>
               Collections and farmer registrations entered during network loss are securely
               stored on your device and sync automatically upon reconnection.
-            </div>
-            <div className="rounded-lg bg-muted/40 p-3 ring-1 ring-border/40">
-              <strong className="text-foreground block mb-0.5">Clerk Earnings</strong>
-              Field clerks earn a flat commission per liter configured by administrators,
-              tracked live in the Clerk Dashboard.
-            </div>
-            <div className="rounded-lg bg-muted/40 p-3 ring-1 ring-border/40">
-              <strong className="text-foreground block mb-0.5">Receipts & SMS</strong>
-              Milk collections automatically generate printable delivery slips and dispatch
-              instant SMS confirmation alerts to farmers.
             </div>
           </div>
         </DialogContent>

@@ -11,10 +11,8 @@ import {
   BarChart3,
   CreditCard,
   Bell,
-  TrendingUp,
   Wallet,
   CalendarDays,
-  ShieldCheck,
   Coins,
   CheckCircle2,
   Plus,
@@ -24,6 +22,7 @@ import {
   LayoutGrid,
   FileSpreadsheet,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import {
   AreaChart,
   Area,
@@ -33,18 +32,19 @@ import {
   YAxis,
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
-import { AppShell } from "@/components/AppShell";
+import { AppShell, ShellCard } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { useRole, type Role } from "@/components/RoleViewContext";
 import { getClerkCommissionRate } from "./milk-prices";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
+  ssr: false,
   head: () => ({
     meta: [
-      { title: "Operational Dashboard — MaziwaFlow" },
-      { name: "description", content: "MaziwaFlow Dairy Operations Command Center" },
-      { property: "og:title", content: "Operational Dashboard — MaziwaFlow" },
-      { property: "og:description", content: "MaziwaFlow Dairy Operations Command Center" },
+      { title: "Dashboard — MaziwaFlow" },
+      { name: "description", content: "Dairy Collection & Operations Platform" },
+      { property: "og:title", content: "Dashboard — MaziwaFlow" },
+      { property: "og:description", content: "Dairy Collection & Operations Platform" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -52,7 +52,331 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
 });
 
-// Mini sparkline data for today's collection card
+// =========================================================================
+// 1. CLASSIC / ORIGINAL DASHBOARD (FOR CLERKS & FARMERS)
+// =========================================================================
+type RouteTarget =
+  | "/receive-milk"
+  | "/change-password"
+  | "/collections"
+  | "/daily-summary"
+  | "/enquiries"
+  | "/farmers"
+  | "/farmer-dashboard"
+  | "/admin-dashboard"
+  | "/lipa-pole-pole"
+  | "/notifications"
+  | "/milk-prices"
+  | "/payments"
+  | "/staff";
+
+type Action = { label: string; icon: LucideIcon; className: string; to?: RouteTarget };
+
+const CLASSIC_ACTIONS: Action[] = [
+  {
+    label: "Receive Milk",
+    icon: Milk,
+    className: "bg-maziwa-green hover:bg-maziwa-green-deep",
+    to: "/receive-milk",
+  },
+  {
+    label: "Daily Summary",
+    icon: CalendarDays,
+    className: "bg-maziwa-orange hover:bg-maziwa-orange-deep",
+    to: "/daily-summary",
+  },
+  {
+    label: "Enquiries",
+    icon: MessageCircleQuestion,
+    className: "bg-maziwa-orange hover:bg-maziwa-orange-deep",
+    to: "/enquiries",
+  },
+  {
+    label: "View Collections",
+    icon: ClipboardList,
+    className: "bg-maziwa-soft hover:bg-maziwa-soft-deep",
+    to: "/collections",
+  },
+  {
+    label: "Farmer Directory",
+    icon: Users,
+    className: "bg-maziwa-blue hover:bg-maziwa-blue/90",
+    to: "/farmers",
+  },
+  {
+    label: "My Deliveries",
+    icon: BarChart3,
+    className: "bg-maziwa-green hover:bg-maziwa-green-deep",
+    to: "/farmer-dashboard",
+  },
+  {
+    label: "Payments",
+    icon: Wallet,
+    className: "bg-maziwa-blue hover:bg-maziwa-blue/90",
+    to: "/payments",
+  },
+  {
+    label: "Lipa Pole Pole",
+    icon: CreditCard,
+    className: "bg-maziwa-purple hover:bg-maziwa-purple/90",
+    to: "/lipa-pole-pole",
+  },
+  {
+    label: "Notifications",
+    icon: Bell,
+    className: "bg-maziwa-soft hover:bg-maziwa-soft-deep",
+    to: "/notifications",
+  },
+  {
+    label: "Change Password",
+    icon: KeyRound,
+    className: "bg-maziwa-purple hover:bg-maziwa-purple/90",
+    to: "/change-password",
+  },
+];
+
+const CLERK_ACTIONS = [
+  "Receive Milk",
+  "Daily Summary",
+  "Enquiries",
+  "View Collections",
+  "Farmer Directory",
+  "Change Password",
+];
+
+const FARMER_ACTIONS = [
+  "My Deliveries",
+  "Payments",
+  "Lipa Pole Pole",
+  "Notifications",
+  "Enquiries",
+  "View Collections",
+  "Change Password",
+];
+
+function ClerkEarningsSection({ clerkId }: { clerkId: string }) {
+  const [rate, setRate] = useState<number>(() => getClerkCommissionRate());
+  const [stats, setStats] = useState<{
+    totalKg: number;
+    todayKg: number;
+    weekKg: number;
+    monthKg: number;
+    loading: boolean;
+  }>({
+    totalKg: 0,
+    todayKg: 0,
+    weekKg: 0,
+    monthKg: 0,
+    loading: true,
+  });
+
+  useEffect(() => {
+    function updateRate() {
+      setRate(getClerkCommissionRate());
+    }
+    window.addEventListener("maziwa-commission-rate-updated", updateRate);
+    return () => window.removeEventListener("maziwa-commission-rate-updated", updateRate);
+  }, []);
+
+  useEffect(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    weekAgo.setHours(0, 0, 0, 0);
+
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    supabase
+      .from("collections")
+      .select("quantity_kg, status, collected_at")
+      .eq("received_by", clerkId)
+      .neq("status", "Rejected")
+      .then(({ data }) => {
+        const rows = data ?? [];
+        let total = 0;
+        let todayVal = 0;
+        let weekVal = 0;
+        let monthVal = 0;
+
+        rows.forEach((r: any) => {
+          const qty = Number(r.quantity_kg) || 0;
+          total += qty;
+          const dt = new Date(r.collected_at);
+          if (dt >= today) todayVal += qty;
+          if (dt >= weekAgo) weekVal += qty;
+          if (dt >= monthStart) monthVal += qty;
+        });
+
+        setStats({
+          totalKg: total,
+          todayKg: todayVal,
+          weekKg: weekVal,
+          monthKg: monthVal,
+          loading: false,
+        });
+      })
+      .catch((err) => {
+        console.warn("Non-fatal clerk stats fetch error:", err);
+      });
+  }, [clerkId]);
+
+  const totalEarnings = stats.totalKg * rate;
+  const todayEarnings = stats.todayKg * rate;
+  const weekEarnings = stats.weekKg * rate;
+  const monthEarnings = stats.monthKg * rate;
+
+  return (
+    <ShellCard className="mb-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Coins className="size-5 text-maziwa-green-deep" />
+          <h2 className="font-bold text-base">My Earnings</h2>
+        </div>
+        <span className="rounded-full bg-maziwa-green/15 px-2.5 py-0.5 text-xs font-bold text-maziwa-green-deep">
+          KSh {rate.toFixed(2)}/L flat rate
+        </span>
+      </div>
+
+      <div className="rounded-lg bg-muted/40 p-3.5 ring-1 ring-border/60">
+        <div className="flex items-baseline justify-between">
+          <div>
+            <p className="text-xs font-bold text-muted-foreground uppercase">Total Accrued</p>
+            <p className="mt-0.5 text-2xl font-extrabold text-foreground">
+              KSh {totalEarnings.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+          </div>
+          <div className="text-right">
+            <span className="inline-flex items-center gap-1 rounded-full bg-maziwa-blue/15 px-2 py-0.5 text-xs font-semibold text-maziwa-blue">
+              <CheckCircle2 className="size-3" /> Active / Accruing
+            </span>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              From {stats.totalKg.toFixed(1)} L collected
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-3.5 grid grid-cols-3 gap-2 border-t border-border/60 pt-3 text-center">
+          <div className="rounded-md bg-card/80 p-2 ring-1 ring-border/40">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase">Today</p>
+            <p className="mt-0.5 font-extrabold text-xs text-foreground">
+              KSh {todayEarnings.toFixed(0)}
+            </p>
+            <p className="text-[10px] text-muted-foreground">{stats.todayKg.toFixed(1)} L</p>
+          </div>
+          <div className="rounded-md bg-card/80 p-2 ring-1 ring-border/40">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase">7 Days</p>
+            <p className="mt-0.5 font-extrabold text-xs text-foreground">
+              KSh {weekEarnings.toFixed(0)}
+            </p>
+            <p className="text-[10px] text-muted-foreground">{stats.weekKg.toFixed(1)} L</p>
+          </div>
+          <div className="rounded-md bg-card/80 p-2 ring-1 ring-border/40">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase">This Month</p>
+            <p className="mt-0.5 font-extrabold text-xs text-foreground">
+              KSh {monthEarnings.toFixed(0)}
+            </p>
+            <p className="text-[10px] text-muted-foreground">{stats.monthKg.toFixed(1)} L</p>
+          </div>
+        </div>
+      </div>
+    </ShellCard>
+  );
+}
+
+function ClassicRoleDashboard({ role }: { role: "clerk" | "farmer" }) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const context = Route.useRouteContext();
+  const user = context?.user;
+  const [name, setName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.full_name) setName(data.full_name);
+        else if (user.email) setName(user.email.split("@")[0]);
+      })
+      .catch(() => {
+        if (user.email) setName(user.email.split("@")[0]);
+      });
+  }, [user?.id, user?.email]);
+
+  async function logout() {
+    await queryClient.cancelQueries();
+    queryClient.clear();
+    await supabase.auth.signOut();
+    navigate({ to: "/auth", replace: true });
+  }
+
+  const allowedLabels = role === "clerk" ? CLERK_ACTIONS : FARMER_ACTIONS;
+  const visibleActions = CLASSIC_ACTIONS.filter((a) => allowedLabels.includes(a.label));
+  const roleLabel = role === "clerk" ? "Clerk" : "Farmer";
+
+  return (
+    <AppShell
+      title="Maziwaflow Mobile"
+      subtitle={name ? `Karibu, ${name}` : "Dairy Collection System"}
+      back={false}
+    >
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold text-muted-foreground uppercase">Signed in as</p>
+          <p className="text-sm font-semibold text-foreground">{roleLabel}</p>
+        </div>
+        <span className="rounded-full bg-maziwa-blue/10 px-3 py-1 text-xs font-bold text-maziwa-blue">
+          {roleLabel}
+        </span>
+      </div>
+
+      {role === "clerk" && user?.id && <ClerkEarningsSection clerkId={user.id} />}
+
+      <ShellCard>
+        <div className="mb-5">
+          <p className="text-xs font-bold text-muted-foreground uppercase">
+            {roleLabel} menu
+          </p>
+        </div>
+        <nav className="flex flex-col gap-3.5" aria-label="Main menu">
+          {visibleActions.map((a) => (
+            <Button
+              key={a.label}
+              type="button"
+              onClick={() => (a.to ? navigate({ to: a.to }) : undefined)}
+              className={`pill-action h-auto ${a.className}`}
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-foreground/20">
+                <a.icon className="size-[1.125rem]" aria-hidden="true" />
+              </span>
+              <span className="flex-1">{a.label}</span>
+            </Button>
+          ))}
+          <Button
+            type="button"
+            onClick={logout}
+            className="pill-action h-auto bg-maziwa-brown hover:bg-maziwa-brown-deep"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-foreground/20">
+              <LogOut className="size-[1.125rem]" aria-hidden="true" />
+            </span>
+            <span className="flex-1">Logout</span>
+          </Button>
+        </nav>
+      </ShellCard>
+      <p className="mt-6 text-center text-xs text-muted-foreground">Maziwaflow Mobile · v2.0</p>
+    </AppShell>
+  );
+}
+
+// =========================================================================
+// 2. UPDATED OPERATIONAL DASHBOARD (EXCLUSIVE TO ADMINS)
+// =========================================================================
 const SPARKLINE_DATA = [
   { val: 12 },
   { val: 19 },
@@ -64,7 +388,6 @@ const SPARKLINE_DATA = [
   { val: 35 },
 ];
 
-// Weekly trend data matching screenshot
 const DEFAULT_WEEKLY_TRENDS = [
   { day: "Mon", liters: 12.0 },
   { day: "Tue", liters: 12.0 },
@@ -118,7 +441,7 @@ const DEFAULT_RECENT_COLLECTIONS: RecentCollection[] = [
     liters: 14.5,
     rate: 55.0,
     quality: "98%",
-    route: "Eldoret Central",
+    route: "Central Route",
     status: "Verified",
   },
   {
@@ -134,152 +457,9 @@ const DEFAULT_RECENT_COLLECTIONS: RecentCollection[] = [
   },
 ];
 
-function ClerkEarningsSection({ clerkId }: { clerkId: string }) {
-  const [rate, setRate] = useState<number>(getClerkCommissionRate());
-  const [stats, setStats] = useState<{
-    totalKg: number;
-    todayKg: number;
-    weekKg: number;
-    monthKg: number;
-    loading: boolean;
-  }>({
-    totalKg: 0,
-    todayKg: 0,
-    weekKg: 0,
-    monthKg: 0,
-    loading: true,
-  });
-
-  useEffect(() => {
-    function updateRate() {
-      setRate(getClerkCommissionRate());
-    }
-    window.addEventListener("maziwa-commission-rate-updated", updateRate);
-    return () => window.removeEventListener("maziwa-commission-rate-updated", updateRate);
-  }, []);
-
-  useEffect(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    weekAgo.setHours(0, 0, 0, 0);
-
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-
-    supabase
-      .from("collections")
-      .select("quantity_kg, status, collected_at")
-      .eq("received_by", clerkId)
-      .neq("status", "Rejected")
-      .then(({ data }) => {
-        const rows = data ?? [];
-        let total = 0;
-        let todayVal = 0;
-        let weekVal = 0;
-        let monthVal = 0;
-
-        rows.forEach((r) => {
-          const qty = Number(r.quantity_kg) || 0;
-          total += qty;
-          const dt = new Date(r.collected_at);
-          if (dt >= today) todayVal += qty;
-          if (dt >= weekAgo) weekVal += qty;
-          if (dt >= monthStart) monthVal += qty;
-        });
-
-        setStats({
-          totalKg: total,
-          todayKg: todayVal,
-          weekKg: weekVal,
-          monthKg: monthVal,
-          loading: false,
-        });
-      });
-  }, [clerkId]);
-
-  const totalEarnings = stats.totalKg * rate;
-  const todayEarnings = stats.todayKg * rate;
-  const weekEarnings = stats.weekKg * rate;
-  const monthEarnings = stats.monthKg * rate;
-
-  return (
-    <div className="rounded-2xl bg-card border border-border/80 p-5 shadow-xs mb-6">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Coins className="size-5 text-emerald-600" />
-          <h2 className="font-bold text-base text-foreground">My Clerk Earnings</h2>
-        </div>
-        <span className="rounded-full bg-emerald-500/15 px-3 py-0.5 text-xs font-bold text-emerald-700 dark:text-emerald-400">
-          KSh {rate.toFixed(2)}/L commission
-        </span>
-      </div>
-
-      <div className="rounded-xl bg-muted/40 p-4 ring-1 ring-border/50">
-        <div className="flex items-baseline justify-between">
-          <div>
-            <p className="text-xs font-bold text-muted-foreground uppercase">Total Accrued</p>
-            <p className="mt-1 text-2xl font-black text-foreground">
-              KSh {totalEarnings.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-          </div>
-          <div className="text-right">
-            <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-400">
-              <CheckCircle2 className="size-3.5" /> Active / Accruing
-            </span>
-            <p className="mt-1 text-xs text-muted-foreground">
-              From {stats.totalKg.toFixed(1)} L collected
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-3 gap-2.5 border-t border-border/60 pt-3 text-center">
-          <div className="rounded-lg bg-card p-2.5 ring-1 ring-border/40">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase">Today</p>
-            <p className="mt-0.5 font-black text-sm text-foreground">
-              KSh {todayEarnings.toFixed(0)}
-            </p>
-            <p className="text-[11px] text-muted-foreground">{stats.todayKg.toFixed(1)} L</p>
-          </div>
-          <div className="rounded-lg bg-card p-2.5 ring-1 ring-border/40">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase">7 Days</p>
-            <p className="mt-0.5 font-black text-sm text-foreground">
-              KSh {weekEarnings.toFixed(0)}
-            </p>
-            <p className="text-[11px] text-muted-foreground">{stats.weekKg.toFixed(1)} L</p>
-          </div>
-          <div className="rounded-lg bg-card p-2.5 ring-1 ring-border/40">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase">This Month</p>
-            <p className="mt-0.5 font-black text-sm text-foreground">
-              KSh {monthEarnings.toFixed(0)}
-            </p>
-            <p className="text-[11px] text-muted-foreground">{stats.monthKg.toFixed(1)} L</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Dashboard() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const context = Route.useRouteContext();
-  const user = context?.user;
-  const rawRole = useRole();
-  const role: Role =
-    rawRole === "clerk" || rawRole === "farmer" || rawRole === "admin"
-      ? rawRole
-      : "admin";
-
-  const [profileData, setProfileData] = useState<{
-    name: string;
-    centre: string;
-  }>({
-    name: "Ian koskel",
-    centre: "Eldoret Hub",
-  });
+function AdminOperationalDashboard() {
+  const [mounted, setMounted] = useState(false);
+  const [todayFormattedDate, setTodayFormattedDate] = useState("");
 
   const [stats, setStats] = useState<{
     todayLiters: number;
@@ -295,48 +475,35 @@ function Dashboard() {
     recentCollections: DEFAULT_RECENT_COLLECTIONS,
   });
 
-  // Fetch real profile
   useEffect(() => {
-    if (!user?.id) return;
-    supabase
-      .from("profiles")
-      .select("full_name, collection_centre")
-      .eq("id", user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) {
-          setProfileData({
-            name: data.full_name || user.email?.split("@")[0] || "Ian koskel",
-            centre: data.collection_centre || "Eldoret Hub",
-          });
-        }
-      });
-  }, [user?.id, user?.email]);
+    setMounted(true);
+    setTodayFormattedDate(
+      new Date().toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      })
+    );
+  }, []);
 
-  // Fetch collections and farmers stats
   useEffect(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // 1. Fetch today's collections safely
     supabase
       .from("collections")
       .select("id, quantity_kg, collected_at, status, farmer_code")
       .order("collected_at", { ascending: false })
       .limit(30)
       .then(({ data, error }) => {
-        if (error) {
-          console.warn("Non-fatal: Failed to load collections for dashboard:", error.message);
-          return;
-        }
-        if (data && data.length > 0) {
+        if (!error && data && data.length > 0) {
           let todaySum = 0;
           data.forEach((r: any) => {
             const dt = new Date(r.collected_at);
             if (dt >= today) todaySum += Number(r.quantity_kg) || 0;
           });
 
-          // Fetch farmer details for recent rows
           const recent = data.slice(0, 4).map((r: any, idx: number) => {
             const code = r?.farmer_code || `2830${8 - idx}`;
             return {
@@ -351,7 +518,7 @@ function Dashboard() {
               farmerId: String(code),
               liters: Number(r?.quantity_kg) || 0,
               rate: 55.0,
-              quality: "100%",
+              quality: r?.quality_grade || "100%",
               route: "Central Route",
               status: r?.status || "Verified",
             };
@@ -365,10 +532,9 @@ function Dashboard() {
         }
       })
       .catch((err) => {
-        console.warn("Non-fatal error fetching collections:", err);
+        console.warn("Non-fatal collections fetch error:", err);
       });
 
-    // 2. Fetch farmers count safely
     supabase
       .from("farmers")
       .select("farmer_code", { count: "exact", head: true })
@@ -381,26 +547,19 @@ function Dashboard() {
         }
       })
       .catch((err) => {
-        console.warn("Non-fatal error counting farmers:", err);
+        console.warn("Non-fatal farmers count error:", err);
       });
   }, []);
-
-  const todayFormattedDate = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
 
   return (
     <AppShell
       title="MaziwaFlow Dashboard"
-      subtitle={`${todayFormattedDate} - ${profileData.centre}`}
+      subtitle={todayFormattedDate}
       back={false}
       wide={true}
     >
       {/* =========================================================================
-          OPERATIONAL DASHBOARD HEADER MATCHING SCREENSHOT
+          OPERATIONAL DASHBOARD HEADER (Eldoret hub removed completely per instructions)
           ========================================================================= */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -408,7 +567,7 @@ function Dashboard() {
             MAZIWAFLOW OPERATIONAL DASHBOARD
           </h1>
           <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 mt-0.5">
-            {todayFormattedDate} - {profileData.centre}
+            {todayFormattedDate}
           </p>
         </div>
 
@@ -423,18 +582,13 @@ function Dashboard() {
         </Button>
       </div>
 
-      {/* Clerk Earnings Section (for field clerks) */}
-      {role === "clerk" && user?.id && <ClerkEarningsSection clerkId={user.id} />}
-
-      {/* =========================================================================
-          MAIN DASHBOARD GRID (Two columns on desktop matching screenshot)
-          ========================================================================= */}
+      {/* Main Dashboard Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* ================= LEFT / CENTER MAIN COLUMN (8 cols on lg) ================= */}
+        {/* Left Column (8 cols on desktop) */}
         <div className="lg:col-span-8 space-y-6">
-          {/* TOP METRIC CARDS ROW */}
+          {/* Top Metric Cards Row */}
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
-            {/* 1. TODAY'S TOTAL COLLECTION CARD */}
+            {/* 1. Today's Total Collection Card */}
             <div className="sm:col-span-5 rounded-2xl bg-white dark:bg-card border border-border/80 p-5 shadow-xs flex flex-col justify-between">
               <div>
                 <p className="text-[11px] font-bold tracking-wider text-slate-400 dark:text-slate-500 uppercase">
@@ -456,31 +610,34 @@ function Dashboard() {
 
               {/* Sparkline curve */}
               <div className="h-14 w-full mt-3">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={SPARKLINE_DATA} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="blueSpark" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#2b6cb0" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#2b6cb0" stopOpacity={0.0} />
-                      </linearGradient>
-                    </defs>
-                    <Area
-                      type="monotone"
-                      dataKey="val"
-                      stroke="#2b6cb0"
-                      strokeWidth={2.5}
-                      fillOpacity={1}
-                      fill="url(#blueSpark)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+                {mounted ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={SPARKLINE_DATA} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="blueSpark" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#2b6cb0" stopOpacity={0.4} />
+                          <stop offset="95%" stopColor="#2b6cb0" stopOpacity={0.0} />
+                        </linearGradient>
+                      </defs>
+                      <Area
+                        type="monotone"
+                        dataKey="val"
+                        stroke="#2b6cb0"
+                        strokeWidth={2.5}
+                        fillOpacity={1}
+                        fill="url(#blueSpark)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full w-full bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse" />
+                )}
               </div>
             </div>
 
-            {/* 2. ACTIVE FARMERS & SYSTEM STATUS CARD WITH COW VISUAL */}
+            {/* 2. Active Farmers & System Status Card */}
             <div className="sm:col-span-7 rounded-2xl bg-white dark:bg-card border border-border/80 p-5 shadow-xs flex flex-col justify-between">
               <div className="grid grid-cols-3 gap-3 items-center">
-                {/* Col A: Active Farmers */}
                 <div>
                   <p className="text-[11px] font-bold tracking-wider text-slate-400 dark:text-slate-500 uppercase">
                     ACTIVE FARMERS
@@ -496,7 +653,6 @@ function Dashboard() {
                   </div>
                 </div>
 
-                {/* Col B: Dairy Graphic Thumbnail */}
                 <div className="flex items-center justify-center">
                   <div className="size-16 sm:size-20 rounded-2xl overflow-hidden border border-border shadow-xs bg-slate-100 dark:bg-slate-800 flex items-center justify-center relative group">
                     <img
@@ -511,7 +667,6 @@ function Dashboard() {
                   </div>
                 </div>
 
-                {/* Col C: Pending Payouts & System Status */}
                 <div className="space-y-3">
                   <div>
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
@@ -539,7 +694,7 @@ function Dashboard() {
             </div>
           </div>
 
-          {/* SECOND ROW: 2 SMALL STAT CARDS */}
+          {/* Secondary Metric Cards */}
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-2xl bg-white dark:bg-card border border-border/80 p-4 shadow-xs">
               <div className="flex items-center justify-between">
@@ -566,9 +721,8 @@ function Dashboard() {
             </div>
           </div>
 
-          {/* 6 OPERATIONAL COLORFUL ACTION BUTTONS MATCHING SCREENSHOT */}
+          {/* 6 Action Buttons */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {/* Change Password (Purple) */}
             <Button
               asChild
               className="h-12 bg-[#6754d6] hover:bg-[#5844c8] text-white font-bold rounded-xl shadow-xs flex items-center justify-start px-4 gap-3"
@@ -579,7 +733,6 @@ function Dashboard() {
               </Link>
             </Button>
 
-            {/* Farmer Directory (Green) */}
             <Button
               asChild
               className="h-12 bg-[#38a169] hover:bg-[#2f855a] text-white font-bold rounded-xl shadow-xs flex items-center justify-start px-4 gap-3"
@@ -590,7 +743,6 @@ function Dashboard() {
               </Link>
             </Button>
 
-            {/* Enquiries (Amber/Orange) */}
             <Button
               asChild
               className="h-12 bg-[#d69e2e] hover:bg-[#b7791f] text-white font-bold rounded-xl shadow-xs flex items-center justify-start px-4 gap-3"
@@ -601,7 +753,6 @@ function Dashboard() {
               </Link>
             </Button>
 
-            {/* Daily Summary (Slate/Blue) */}
             <Button
               asChild
               className="h-12 bg-[#718096] hover:bg-[#4a5568] text-white font-bold rounded-xl shadow-xs flex items-center justify-start px-4 gap-3"
@@ -612,7 +763,6 @@ function Dashboard() {
               </Link>
             </Button>
 
-            {/* Admin Overview (Dark Blue) */}
             <Button
               asChild
               className="h-12 bg-[#2b6cb0] hover:bg-[#2c5282] text-white font-bold rounded-xl shadow-xs flex items-center justify-start px-4 gap-3"
@@ -623,7 +773,6 @@ function Dashboard() {
               </Link>
             </Button>
 
-            {/* Lipa Pole Pole (Teal) */}
             <Button
               asChild
               className="h-12 bg-[#319795] hover:bg-[#285e61] text-white font-bold rounded-xl shadow-xs flex items-center justify-start px-4 gap-3"
@@ -635,7 +784,7 @@ function Dashboard() {
             </Button>
           </div>
 
-          {/* WEEKLY COLLECTION TRENDS CHART CARD */}
+          {/* Weekly Collection Trends Chart */}
           <div className="rounded-2xl bg-white dark:bg-card border border-border/80 p-5 sm:p-6 shadow-xs">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-sm tracking-wider uppercase text-slate-800 dark:text-slate-100">
@@ -645,59 +794,63 @@ function Dashboard() {
             </div>
 
             <div className="h-56 sm:h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={stats.weeklyTrends}
-                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                >
-                  <defs>
-                    <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#2b6cb0" stopOpacity={0.7} />
-                      <stop offset="95%" stopColor="#2b6cb0" stopOpacity={0.05} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis
-                    dataKey="day"
-                    stroke="#94a3b8"
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={{ stroke: "#e2e8f0" }}
-                  />
-                  <YAxis
-                    stroke="#94a3b8"
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={{ stroke: "#e2e8f0" }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "rgba(15, 23, 42, 0.9)",
-                      borderRadius: "10px",
-                      border: "none",
-                      color: "#fff",
-                      fontSize: "12px",
-                      padding: "8px 12px",
-                    }}
-                    formatter={(value: any) => [`${value} Liters`, "Collection"]}
-                  />
-                  <Area
-                    type="natural"
-                    dataKey="liters"
-                    stroke="#1a4d80"
-                    strokeWidth={3}
-                    fillOpacity={1}
-                    fill="url(#trendGradient)"
-                    dot={{ r: 4, fill: "#2b6cb0", strokeWidth: 2, stroke: "#fff" }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              {mounted ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={stats.weeklyTrends}
+                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                  >
+                    <defs>
+                      <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#2b6cb0" stopOpacity={0.7} />
+                        <stop offset="95%" stopColor="#2b6cb0" stopOpacity={0.05} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis
+                      dataKey="day"
+                      stroke="#94a3b8"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                    />
+                    <YAxis
+                      stroke="#94a3b8"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={{ stroke: "#e2e8f0" }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "rgba(15, 23, 42, 0.9)",
+                        borderRadius: "10px",
+                        border: "none",
+                        color: "#fff",
+                        fontSize: "12px",
+                        padding: "8px 12px",
+                      }}
+                      formatter={(value: any) => [`${value} Liters`, "Collection"]}
+                    />
+                    <Area
+                      type="natural"
+                      dataKey="liters"
+                      stroke="#1a4d80"
+                      strokeWidth={3}
+                      fillOpacity={1}
+                      fill="url(#trendGradient)"
+                      dot={{ r: 4, fill: "#2b6cb0", strokeWidth: 2, stroke: "#fff" }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full w-full bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse" />
+              )}
             </div>
           </div>
         </div>
 
-        {/* ================= RIGHT COLUMN: QUICK ACTIONS & RECENT ACTIVITY (4 cols on lg) ================= */}
+        {/* Right Column (4 cols on desktop) */}
         <div className="lg:col-span-4 space-y-6">
-          {/* QUICK ACTIONS CARD MATCHING SCREENSHOT WARM CREAM CONTAINER */}
+          {/* Quick Actions Card */}
           <div className="rounded-2xl bg-[#fbf7ed] dark:bg-card border border-[#f0e6d2] dark:border-border/80 p-6 shadow-xs">
             <div className="flex items-center gap-2 mb-4 text-slate-800 dark:text-slate-100">
               <Zap className="size-5 text-amber-500 fill-amber-500" />
@@ -747,7 +900,7 @@ function Dashboard() {
             </div>
           </div>
 
-          {/* RECENT ACTIVITY: MILK COLLECTIONS TABLE */}
+          {/* Recent Activity Table */}
           <div className="rounded-2xl bg-white dark:bg-card border border-border/80 p-5 shadow-xs">
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -804,4 +957,23 @@ function Dashboard() {
       </div>
     </AppShell>
   );
+}
+
+// =========================================================================
+// MAIN ROUTE COMPONENT (ROLE-BASED ROUTING)
+// =========================================================================
+function Dashboard() {
+  const rawRole = useRole();
+  const role: Role =
+    rawRole === "clerk" || rawRole === "farmer" || rawRole === "admin"
+      ? rawRole
+      : "admin";
+
+  // Admins get the updated Operational Dashboard view
+  if (role === "admin") {
+    return <AdminOperationalDashboard />;
+  }
+
+  // Clerks and Farmers retain their original (old) UI layout
+  return <ClassicRoleDashboard role={role} />;
 }

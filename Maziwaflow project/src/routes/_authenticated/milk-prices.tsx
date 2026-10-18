@@ -44,6 +44,7 @@ export const CLERK_COMMISSION_KEY = "maziwa_clerk_commission_rate";
 export const DEFAULT_CLERK_COMMISSION = 2.0;
 
 export function getClerkCommissionRate(): number {
+  if (typeof window === "undefined") return DEFAULT_CLERK_COMMISSION;
   try {
     const val = localStorage.getItem(CLERK_COMMISSION_KEY);
     return val ? parseFloat(val) : DEFAULT_CLERK_COMMISSION;
