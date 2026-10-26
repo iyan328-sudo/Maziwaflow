@@ -30,24 +30,48 @@ jobs:
         run: echo "VITE_BASE_PATH=/${GITHUB_REPOSITORY#*/}/" >> "$GITHUB_ENV"
       - run: npm run build
         working-directory: "Maziwaflow  mobile app"
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       - name: Prepare static site
         working-directory: "Maziwaflow  mobile app"
         run: |
-          echo "=== Contents of .output/public/ ==="
-          ls -la .output/public/ || true
-          # Locate the shell HTML — TanStack Start may emit _shell.html or index.html depending on version
+          echo "=== Build output ==="
+          find .output -type f | sort || true
+
+          # The app builds for Cloudflare Workers SSR — no static shell is emitted.
+          # Use _shell.html or index.html if present; otherwise generate a redirect
+          # to the live Cloudflare Workers deployment so GitHub Pages still resolves.
           if [ -f .output/public/_shell.html ]; then
             SHELL_FILE=".output/public/_shell.html"
+            echo "Found _shell.html"
           elif [ -f .output/public/index.html ]; then
             SHELL_FILE=".output/public/index.html"
+            echo "Found index.html"
           else
-            echo "ERROR: No shell HTML found. HTML files present:"
-            find .output/public -name "*.html" | head -20
-            exit 1
+            echo "No HTML shell found (SSR build) — generating redirect page"
+            mkdir -p .output/public
+            cat > .output/public/index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Maziwaflow Mobile</title>
+  <meta http-equiv="refresh" content="0; url=https://maziwaflow-mobile.workers.dev" />
+  <script>window.location.replace("https://maziwaflow-mobile.workers.dev" + window.location.pathname + window.location.search + window.location.hash);</script>
+</head>
+<body>
+  <p>Redirecting to <a href="https://maziwaflow-mobile.workers.dev">Maziwaflow Mobile</a>…</p>
+</body>
+</html>
+EOF
+            SHELL_FILE=".output/public/index.html"
           fi
-          echo "Using shell file: $SHELL_FILE"
+
           cp "$SHELL_FILE" .output/public/index.html
           cp "$SHELL_FILE" .output/public/404.html
+          echo "Static site prepared using: $SHELL_FILE"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
