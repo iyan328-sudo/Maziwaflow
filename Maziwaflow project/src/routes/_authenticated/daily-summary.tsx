@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Loader2,
@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { escapeHtml, toCsvCell } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/daily-summary")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Daily Summary — Maziwaflow Mobile" },

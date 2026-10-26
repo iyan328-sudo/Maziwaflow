@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+﻿import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   BarChart3,
@@ -30,6 +30,7 @@ import { AppShell, ShellCard } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_authenticated/admin-dashboard")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Admin Dashboard — Maziwaflow Mobile" },

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, CreditCard, Check, X, Clock } from "lucide-react";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useRole } from "@/components/RoleViewContext";
 
 export const Route = createFileRoute("/_authenticated/lipa-pole-pole")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Lipa Pole Pole — Maziwaflow Mobile" },

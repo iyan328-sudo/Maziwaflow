@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Save, TrendingUp, Award, Coins } from "lucide-react";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useRole } from "@/components/RoleViewContext";
 
 export const Route = createFileRoute("/_authenticated/milk-prices")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Milk Prices & Compensation — Maziwaflow Mobile" },

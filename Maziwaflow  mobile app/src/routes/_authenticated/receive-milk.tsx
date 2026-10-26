@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+﻿import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -38,6 +38,7 @@ import {
 } from "@/lib/offline-queue";
 
 export const Route = createFileRoute("/_authenticated/receive-milk")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Receive Milk — Maziwaflow Mobile" },

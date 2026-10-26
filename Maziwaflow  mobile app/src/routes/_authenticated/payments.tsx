@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -23,6 +23,7 @@ import { MpesaCheckoutModal } from "@/components/MpesaCheckoutModal";
 import { escapeHtml, toCsvCell } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/payments")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Payments — Maziwaflow Mobile" },

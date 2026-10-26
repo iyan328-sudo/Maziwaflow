@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   ClipboardList,
@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell, ShellCard } from "@/components/AppShell";
 
 export const Route = createFileRoute("/_authenticated/farmer-dashboard")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Farmer Dashboard — Maziwaflow Mobile" },

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+﻿import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -23,6 +23,7 @@ import { useRole } from "@/components/RoleViewContext";
 import { escapeHtml, toCsvCell } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/collections")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "View Collections — Maziwaflow Mobile" },

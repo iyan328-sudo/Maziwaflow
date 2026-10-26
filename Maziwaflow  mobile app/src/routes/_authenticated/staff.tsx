@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Plus, Search, Shield, User, KeyRound, Pencil, Eye, EyeOff } from "lucide-react";
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/_authenticated/staff")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Staff Accounts — Maziwaflow Mobile" },

@@ -1,4 +1,4 @@
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+﻿import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Droplets,
@@ -140,7 +140,7 @@ export function AppShell({
   const role = useOptionalRole() || "admin";
   const online = useOnlineStatus();
 
-  const [pendingCount, setPendingCount] = useState(getTotalPendingCount());
+  const [pendingCount, setPendingCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);

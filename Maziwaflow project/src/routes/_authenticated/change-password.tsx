@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+﻿import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import { AppShell, ShellCard, fieldClass, labelClass } from "@/components/AppShe
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_authenticated/change-password")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Change Password — Maziwaflow Mobile" },
