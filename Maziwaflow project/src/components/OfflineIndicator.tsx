@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { WifiOff, RefreshCw, CheckCircle2, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -13,7 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 export function OfflineIndicator() {
   const online = useOnlineStatus();
-  const [pendingCount, setPendingCount] = useState<number>(getTotalPendingCount());
+  const [pendingCount, setPendingCount] = useState<number>(0);
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
@@ -94,7 +94,7 @@ export function OfflineIndicator() {
 
 export function ManualSyncButton() {
   const online = useOnlineStatus();
-  const [pendingCount, setPendingCount] = useState<number>(getTotalPendingCount());
+  const [pendingCount, setPendingCount] = useState<number>(0);
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
