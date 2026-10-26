@@ -31,8 +31,23 @@ jobs:
       - run: npm run build
         working-directory: "Maziwaflow  mobile app"
       - name: Prepare static site
-        run: cp .output/public/_shell.html .output/public/index.html && cp .output/public/_shell.html .output/public/404.html
         working-directory: "Maziwaflow  mobile app"
+        run: |
+          echo "=== Contents of .output/public/ ==="
+          ls -la .output/public/ || true
+          # Locate the shell HTML — TanStack Start may emit _shell.html or index.html depending on version
+          if [ -f .output/public/_shell.html ]; then
+            SHELL_FILE=".output/public/_shell.html"
+          elif [ -f .output/public/index.html ]; then
+            SHELL_FILE=".output/public/index.html"
+          else
+            echo "ERROR: No shell HTML found. HTML files present:"
+            find .output/public -name "*.html" | head -20
+            exit 1
+          fi
+          echo "Using shell file: $SHELL_FILE"
+          cp "$SHELL_FILE" .output/public/index.html
+          cp "$SHELL_FILE" .output/public/404.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
