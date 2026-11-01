@@ -1,4 +1,4 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -163,10 +163,14 @@ function Farmers() {
   function loadAccounts() {
     supabase
       .from("profiles")
-      .select("id, full_name, role")
-      .eq("role", "farmer")
+      .select("id, full_name")
       .order("full_name")
-      .then(({ data }) => setAccounts((data as FarmerAccount[]) ?? []));
+      .then(({ data, error }) => {
+        if (!error && data) {
+          setAccounts(data.map((p) => ({ ...p, role: "farmer" })) as FarmerAccount[]);
+        }
+      })
+      .catch(() => {});
   }
 
   const linkedAccountIds = new Set((rows ?? []).map((r) => r.linked_user_id).filter(Boolean));

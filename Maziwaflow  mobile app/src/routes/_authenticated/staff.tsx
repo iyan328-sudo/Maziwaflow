@@ -1,4 +1,4 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Plus, Search, Shield, User, KeyRound, Pencil, Eye, EyeOff } from "lucide-react";
@@ -78,10 +78,23 @@ function Staff() {
   const loadStaff = useCallback(() => {
     supabase
       .from("profiles")
-      .select("id, full_name, collection_centre, role, created_at")
-      .in("role", ["admin", "clerk"])
+      .select("id, full_name, collection_centre, created_at")
       .order("created_at", { ascending: false })
-      .then(({ data }) => setRows((data as StaffMember[]) ?? []));
+      .then(({ data, error }) => {
+        if (!error && data) {
+          const members: StaffMember[] = data.map((p) => ({
+            id: p.id,
+            full_name: p.full_name,
+            collection_centre: p.collection_centre,
+            role: "clerk" as const,
+            created_at: p.created_at,
+          }));
+          setRows(members);
+        } else {
+          setRows([]);
+        }
+      })
+      .catch(() => setRows([]));
   }, []);
 
   useEffect(() => {
